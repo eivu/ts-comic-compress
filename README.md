@@ -113,28 +113,31 @@ The tool provides detailed progress information and a summary report:
 - **Image Processing**: Sharp library (high-quality Lanczos3 resampling)
 - **Compression**: WebP lossy compression with configurable quality
 - **Archive Format**: ZIP-based CBZ files (universal comic reader compatibility)
-- **CBR Support**: Processes ZIP-based CBR files (most CBR files are actually ZIP archives)
+- **CBR Support**: Processes both ZIP-based and RAR-based CBR files (automatically detects format)
 - **PDF Support**: Extracts embedded images from PDF files and converts to CBZ format
+- **RAR Support**: Full support for RAR archives using node-unrar-js
 - **Threading**: Parallel file processing support
 
 ## Supported File Formats
 
 ### Input Formats
+
 - **CBZ**: ZIP archives containing images
-- **CBR**: RAR/ZIP archives containing images (ZIP-based CBR files are supported)
+- **CBR**: RAR or ZIP archives containing images (automatically detects and handles both formats)
 - **PDF**: PDF files with embedded images (converted to CBZ)
 
 ### Image Formats (within archives)
+
 - **JPEG/JPG**: Converted to WebP
 - **PNG**: Converted to WebP
 - **WebP**: Kept as-is (skipped)
 
 ## Limitations
 
-- Output uses ZIP compression for CBR files (maintains .cbr extension for compatibility)
+- Output uses ZIP compression for CBR files (converts RAR-based CBR files to CBZ format)
 - WebP format may not be supported by very old comic readers
 - PDF processing only extracts embedded raster images (vector graphics are not rasterized)
-- RAR-based CBR files require additional setup (most CBR files are ZIP-based and work fine)
+- RAR volume archives (multi-part RAR files) are not supported
 
 ## Building
 
@@ -161,10 +164,10 @@ ts-node-dev --respawn src/index.ts [options]
 - **sharp**: High-performance image processing and WebP conversion
 - **yauzl**: ZIP file reading
 - **yazl**: ZIP file writing
+- **node-unrar-js**: RAR archive extraction
 - **pdfjs-dist**: PDF file processing
 - **fs-extra**: Enhanced file system operations
 - **chalk**: Terminal colors
-- **progress**: Progress bar display
 
 ## License
 
@@ -173,4 +176,3 @@ MIT
 ## Credits
 
 Original Rust implementation: [erikvullings/compress_comics](https://github.com/erikvullings/compress_comics)
-

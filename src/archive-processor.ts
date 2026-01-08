@@ -2,7 +2,7 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import * as yauzl from "yauzl";
 import * as yazl from "yazl";
-import { createExtractorFromFile } from "node-unrar-js";
+import { createExtractorFromData } from "node-unrar-js";
 import { ImageConverter } from "./image-converter";
 import { ImageInfo, ProgressCallback } from "./types";
 
@@ -184,9 +184,14 @@ export class ArchiveProcessor {
     const images: ImageInfo[] = [];
     let originalSize = 0;
 
-    // Extract images from RAR using node-unrar-js
-    const extractor = await createExtractorFromFile({
-      filepath: inputPath,
+    // Read RAR file into memory
+    const rarBuffer = await fs.readFile(inputPath);
+    // Convert Buffer to ArrayBuffer
+    const rarData = rarBuffer.buffer.slice(rarBuffer.byteOffset, rarBuffer.byteOffset + rarBuffer.byteLength);
+
+    // Extract images from RAR using node-unrar-js (in-memory extraction)
+    const extractor = await createExtractorFromData({
+      data: rarData,
     });
 
     const fileList = extractor.getFileList();
@@ -198,21 +203,26 @@ export class ArchiveProcessor {
       return [".jpg", ".jpeg", ".png", ".webp"].includes(ext);
     });
 
-    // Extract image files
-    for (const fileHeader of imageFiles) {
-      const extracted = extractor.extract({ files: [fileHeader.name] });
-      const extractedFiles = [...extracted.files];
+    if (imageFiles.length === 0) {
+      // No image files found, return empty result
+      return { imagesProcessed: 0, imagesSkipped: 0, originalSize: 0, compressedSize: 0 };
+    }
 
-      for (const file of extractedFiles) {
-        if (file.extraction) {
-          const buffer = Buffer.from(file.extraction);
-          originalSize += buffer.length;
-          images.push({
-            data: buffer,
-            name: fileHeader.name,
-            originalSize: buffer.length,
-          });
-        }
+    // Extract all image files at once (in-memory extraction returns actual file data)
+    const imageFileNames = imageFiles.map((fileHeader) => fileHeader.name);
+    const extracted = extractor.extract({ files: imageFileNames });
+    const extractedFiles = [...extracted.files];
+
+    // Process extracted files - extraction field contains Uint8Array with file data
+    for (const file of extractedFiles) {
+      if (file.extraction && !file.fileHeader.flags.directory) {
+        const buffer = Buffer.from(file.extraction);
+        originalSize += buffer.length;
+        images.push({
+          data: buffer,
+          name: file.fileHeader.name,
+          originalSize: buffer.length,
+        });
       }
     }
 

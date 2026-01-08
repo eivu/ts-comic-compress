@@ -7,16 +7,17 @@ declare module "node-unrar-js" {
       continued: boolean;
       password: boolean;
       firstVolume: boolean;
-      [key: string]: boolean;
+      directory?: boolean;
+      [key: string]: boolean | undefined;
     };
     unpSize: number;
     packSize: number;
-    hostOS: string;
+    hostOS?: string;
     fileCRC: number;
     fileTime: number;
     unpVer: number;
     method: number;
-    fileAttr: number;
+    fileAttr?: number;
   }
 
   export interface Extractor {
@@ -36,8 +37,18 @@ declare module "node-unrar-js" {
     filepath: string;
   }
 
+  export interface ExtractorFromDataOptions {
+    data: ArrayBuffer;
+    password?: string;
+    wasmBinary?: ArrayBuffer;
+  }
+
   export function createExtractorFromFile(
     options: ExtractorFromFileOptions
+  ): Promise<Extractor>;
+
+  export function createExtractorFromData(
+    options: ExtractorFromDataOptions
   ): Promise<Extractor>;
 }
 

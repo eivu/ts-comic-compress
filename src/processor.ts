@@ -216,9 +216,22 @@ export class ComicProcessor {
 
       this.stats.fileStats.set(filePath, fileStats);
 
-      // Handle rename original if requested
-      // Skip this if we used the original file (already copied it)
-      if (this.options.renameOriginal && !originalWasBetter) {
+      // Handle move original if requested (only if processing was successful)
+      // Success means: images were processed (result.imagesProcessed > 0) and no errors occurred
+      if (this.options.moveOriginal && result.imagesProcessed > 0) {
+        // Only move if file still exists (it might have been moved/renamed already)
+        if (await fs.pathExists(filePath)) {
+          const fileDir = path.dirname(filePath);
+          const doneDir = path.join(fileDir, "done");
+          await fs.ensureDir(doneDir);
+          const fileName = path.basename(filePath);
+          const donePath = path.join(doneDir, fileName);
+          await fs.move(filePath, donePath);
+          this.logger.info(`  Moved original file to: ${donePath}`);
+        }
+      } else if (this.options.renameOriginal && !originalWasBetter) {
+        // Handle rename original if requested (only if move-original is not set)
+        // Skip this if we used the original file (already copied it)
         const originalBackupPath = filePath.replace(
           /(\.[^.]+)$/,
           "_original$1"

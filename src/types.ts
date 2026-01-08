@@ -22,6 +22,7 @@ export interface ProcessorOptions {
   skipExisting: boolean;
   parallel: boolean;
   renameOriginal: boolean;
+  moveOriginal: boolean;
   targetHeight?: number;
 }
 

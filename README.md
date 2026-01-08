@@ -52,6 +52,7 @@ comic-compress [options]
   -p, --parallel                Run in parallel, utilizing all computing resources
   --rename-original             Rename original files to *_original instead of copying
   --height <number>             Target height for images (maintains aspect ratio). If not specified, images are not resized
+  -m, --move-original           Move successfully compressed objects to a subfolder named done
   -h, --help                    Display help for command
 ```
 

@@ -19,6 +19,7 @@ program
   .option('-q, --quality <number>', 'Quality to use for the webp files (0-100)', '75')
   .option('-p, --parallel', 'Run in parallel, utilizing all computing resources', false)
   .option('--rename-original', 'Rename original files to *_original instead of copying', false)
+  .option('-m, --move-original', 'Move original files to a "done" subdirectory after successful compression', false)
   .option('--height <number>', 'Target height for images (maintains aspect ratio). If not specified, images are not resized', '')
   .parse(process.argv);
 
@@ -33,6 +34,7 @@ async function main() {
     skipExisting: options.skip,
     parallel: options.parallel,
     renameOriginal: options.renameOriginal,
+    moveOriginal: options.moveOriginal,
     targetHeight: options.height ? parseInt(options.height, 10) : undefined,
   });
 

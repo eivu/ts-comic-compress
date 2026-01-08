@@ -21,8 +21,14 @@ export class ComicProcessor {
       options.quality,
       options.targetHeight
     );
-    this.archiveProcessor = new ArchiveProcessor(this.imageConverter);
-    this.pdfProcessor = new PDFProcessor(this.imageConverter);
+    this.archiveProcessor = new ArchiveProcessor(
+      this.imageConverter,
+      this.createProgressCallback.bind(this)
+    );
+    this.pdfProcessor = new PDFProcessor(
+      this.imageConverter,
+      this.createProgressCallback.bind(this)
+    );
     this.stats = {
       filesProcessed: 0,
       imagesProcessed: 0,
@@ -31,6 +37,30 @@ export class ComicProcessor {
       totalCompressedSize: 0,
       fileStats: new Map(),
     };
+  }
+
+  private currentFileName: string = "";
+
+  private createProgressCallback(current: number, total: number): void {
+    if (total === 0) return;
+
+    // Show total pages count when starting (current = 0)
+    if (current === 0) {
+      process.stdout.write(
+        `\r  Total pages: ${total} - ${this.currentFileName}\n`
+      );
+      return;
+    }
+
+    // Clear previous line and write progress
+    const percentage = Math.round((current / total) * 100);
+    process.stdout.write(
+      `\r  Processing page ${current}/${total} (${percentage}%) - ${this.currentFileName}`
+    );
+    // If we're done, add a newline and clear the line
+    if (current === total) {
+      process.stdout.write("\r" + " ".repeat(100) + "\r");
+    }
   }
 
   async processDirectory(dirPath: string): Promise<void> {
@@ -108,6 +138,7 @@ export class ComicProcessor {
       const originalStats = await fs.stat(filePath);
       const originalSize = originalStats.size;
 
+      this.currentFileName = fileName;
       this.logger.info(`Processing: ${fileName}`);
 
       let result: {
@@ -117,8 +148,9 @@ export class ComicProcessor {
         compressedSize: number;
       };
       let finalOutputPath = outputPath;
+      const isPDF = ext === ".pdf";
 
-      if (ext === ".pdf") {
+      if (isPDF) {
         result = await this.pdfProcessor.processPDF(filePath, outputPath);
         finalOutputPath = outputPath.replace(/\.pdf$/i, ".cbz");
       } else if (ext === ".cbz") {
@@ -127,13 +159,44 @@ export class ComicProcessor {
         result = await this.archiveProcessor.processCBR(filePath, outputPath);
       } else {
         this.logger.warn(`Unsupported file type: ${filePath}`);
+        this.currentFileName = "";
         return;
       }
 
-      // Calculate savings
+      // Clear the progress line and reset filename
+      this.currentFileName = "";
+
+      // Check if compressed file is larger than original - if so, use original instead
+      let finalCompressedSize = result.compressedSize;
+      const originalWasBetter = result.compressedSize > originalSize;
+
+      if (originalWasBetter) {
+        // Delete the compressed/converted file and copy the original instead
+        if (await fs.pathExists(finalOutputPath)) {
+          await fs.remove(finalOutputPath);
+        }
+        // For PDFs, keep the original PDF extension; for others, keep original extension
+        if (isPDF) {
+          // Keep PDF format if it's smaller than the CBZ
+          await fs.copy(filePath, outputPath);
+          finalOutputPath = outputPath; // Reset to PDF output path
+        } else {
+          await fs.copy(filePath, finalOutputPath);
+        }
+        finalCompressedSize = originalSize;
+        this.logger.info(
+          `  Original file is smaller (${(originalSize / (1024 * 1024)).toFixed(
+            2
+          )} MB vs ${(result.compressedSize / (1024 * 1024)).toFixed(
+            2
+          )} MB), using original instead`
+        );
+      }
+
+      // Calculate savings (will be 0 or negative if original was better)
       const savings =
         originalSize > 0
-          ? ((originalSize - result.compressedSize) / originalSize) * 100
+          ? ((originalSize - finalCompressedSize) / originalSize) * 100
           : 0;
 
       // Update stats
@@ -141,11 +204,11 @@ export class ComicProcessor {
       this.stats.imagesProcessed += result.imagesProcessed;
       this.stats.imagesSkipped += result.imagesSkipped;
       this.stats.totalOriginalSize += originalSize;
-      this.stats.totalCompressedSize += result.compressedSize;
+      this.stats.totalCompressedSize += finalCompressedSize;
 
       const fileStats: FileStats = {
         originalSize,
-        compressedSize: result.compressedSize,
+        compressedSize: finalCompressedSize,
         imagesProcessed: result.imagesProcessed,
         imagesSkipped: result.imagesSkipped,
         savings,
@@ -154,7 +217,8 @@ export class ComicProcessor {
       this.stats.fileStats.set(filePath, fileStats);
 
       // Handle rename original if requested
-      if (this.options.renameOriginal) {
+      // Skip this if we used the original file (already copied it)
+      if (this.options.renameOriginal && !originalWasBetter) {
         const originalBackupPath = filePath.replace(
           /(\.[^.]+)$/,
           "_original$1"
@@ -162,11 +226,18 @@ export class ComicProcessor {
         await fs.move(filePath, originalBackupPath);
       }
 
-      this.logger.success(
-        `✓ ${fileName}: ${savings.toFixed(1)}% savings (${
-          result.imagesProcessed
-        } images processed, ${result.imagesSkipped} skipped)`
-      );
+      // Log success message
+      if (originalWasBetter) {
+        this.logger.success(
+          `✓ ${fileName}: Original file kept (compressed file was larger, ${result.imagesProcessed} images processed)`
+        );
+      } else {
+        this.logger.success(
+          `✓ ${fileName}: ${savings.toFixed(1)}% savings (${
+            result.imagesProcessed
+          } images processed, ${result.imagesSkipped} skipped)`
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Failed to process ${filePath}: ${

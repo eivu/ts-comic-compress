@@ -2,7 +2,7 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import * as pdfjsLib from "pdfjs-dist";
 import { ImageConverter } from "./image-converter";
-import { ImageInfo } from "./types";
+import { ImageInfo, ProgressCallback } from "./types";
 import * as yazl from "yazl";
 
 // Configure pdfjs worker for Node.js
@@ -10,7 +10,10 @@ const workerPath = require.resolve("pdfjs-dist/build/pdf.worker.min.mjs");
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
 
 export class PDFProcessor {
-  constructor(private imageConverter: ImageConverter) {}
+  constructor(
+    private imageConverter: ImageConverter,
+    private progressCallback?: ProgressCallback
+  ) {}
 
   async processPDF(
     inputPath: string,
@@ -109,12 +112,34 @@ export class PDFProcessor {
       };
     }
 
+    // Sort images by name to maintain page order before processing
+    images.sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    );
+
     // Process images
     let imagesProcessed = 0;
     let imagesSkipped = 0;
     const processedImages: Array<{ name: string; data: Buffer }> = [];
+    const totalPages = images.length;
 
-    for (const image of images) {
+    // Report initial progress (0 of total) to show total page count
+    if (this.progressCallback && totalPages > 0) {
+      this.progressCallback(0, totalPages);
+    }
+
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      const currentPage = i + 1;
+
+      // Report progress
+      if (this.progressCallback) {
+        this.progressCallback(currentPage, totalPages);
+      }
+
       const shouldProcess = await this.imageConverter.shouldProcess(image);
       if (shouldProcess) {
         try {
@@ -141,13 +166,8 @@ export class PDFProcessor {
       }
     }
 
-    // Sort images by name to maintain page order
-    processedImages.sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    );
+    // Images are already sorted from the original array, just ensure processed images maintain order
+    // (They should already be in order since we process them in order)
 
     // Create new CBZ file (convert PDF to CBZ)
     const zipfile = new yazl.ZipFile();

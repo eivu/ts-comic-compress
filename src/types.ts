@@ -31,3 +31,4 @@ export interface ImageInfo {
   originalSize: number;
 }
 
+export type ProgressCallback = (current: number, total: number) => void;

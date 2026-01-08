@@ -1,0 +1,40 @@
+{
+  "name": "ts-comic-compress",
+  "version": "1.0.0",
+  "description": "Compresses comic books (CBR or CBZ extension) by using webp and decreasing the target height",
+  "main": "dist/index.js",
+  "bin": {
+    "comic-compress": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "comic",
+    "compress",
+    "cbr",
+    "cbz",
+    "webp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^11.1.0",
+    "sharp": "^0.33.2",
+    "yauzl": "^2.10.0",
+    "yazl": "^2.5.1",
+    "pdfjs-dist": "^4.0.269",
+    "fs-extra": "^11.2.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.11.5",
+    "@types/yauzl": "^2.10.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

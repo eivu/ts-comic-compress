@@ -263,6 +263,11 @@ export class ComicProcessor {
   private getOutputPath(inputPath: string): string {
     const baseName = path.basename(inputPath);
 
+    // Insert the `.eivu_compressed` marker before the file extension
+    const ext = path.extname(baseName);
+    const nameWithoutExt = baseName.slice(0, -ext.length) || baseName;
+    const compressedBaseName = `${nameWithoutExt}.eivu_compressed${ext}`;
+
     // Resolve output directory to absolute path to avoid relative path issues
     const resolvedOutputDir = path.resolve(this.options.outputDir);
 
@@ -270,7 +275,7 @@ export class ComicProcessor {
     // This handles the case where a single file outside cwd is being processed
     if (!this.options.recursive) {
       // For single file processing, always put output directly in the output directory
-      return path.join(resolvedOutputDir, baseName);
+      return path.join(resolvedOutputDir, compressedBaseName);
     }
 
     // For recursive directory processing, preserve directory structure
@@ -288,10 +293,10 @@ export class ComicProcessor {
 
       const dir = path.dirname(relativePath);
       if (dir === "." || dir === "") {
-        return path.join(resolvedOutputDir, baseName);
+        return path.join(resolvedOutputDir, compressedBaseName);
       } else {
         // Use resolved output dir to avoid issues with relative paths
-        return path.join(resolvedOutputDir, dir, baseName);
+        return path.join(resolvedOutputDir, dir, compressedBaseName);
       }
     } catch {
       // Fallback: just use output dir + filename

@@ -6,6 +6,7 @@ dist/
 *.cbz
 *.pdf
 converted_comics/
+coverage/
 output/
 .idea/
 .vscode/

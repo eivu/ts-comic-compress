@@ -148,6 +148,23 @@ npm run build
 
 This will compile TypeScript to JavaScript in the `dist/` directory.
 
+## Testing
+
+This project includes a comprehensive test suite using Jest.
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+See [TESTING.md](TESTING.md) for detailed testing documentation.
+
 ## Development
 
 ```bash

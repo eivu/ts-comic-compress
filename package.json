@@ -22,7 +22,7 @@
     "cbz",
     "webp"
   ],
-  "author": "",
+  "author": "Rob Jenkins",
   "license": "MIT",
   "dependencies": {
     "chalk": "^4.1.2",

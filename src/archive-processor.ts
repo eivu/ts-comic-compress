@@ -2,19 +2,22 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import * as yauzl from "yauzl";
 import * as yazl from "yazl";
-import { createExtractorFromData } from "node-unrar-js";
+import {
+  createExtractorFromData,
+  createExtractorFromFile,
+} from "node-unrar-js";
 import { ImageConverter } from "./image-converter";
 import { ImageInfo, ProgressCallback } from "./types";
 
 export class ArchiveProcessor {
   constructor(
     private imageConverter: ImageConverter,
-    private progressCallback?: ProgressCallback
+    private progressCallback?: ProgressCallback,
   ) {}
 
   async processCBZ(
     inputPath: string,
-    outputPath: string
+    outputPath: string,
   ): Promise<{
     imagesProcessed: number;
     imagesSkipped: number;
@@ -83,7 +86,7 @@ export class ArchiveProcessor {
       a.name.localeCompare(b.name, undefined, {
         numeric: true,
         sensitivity: "base",
-      })
+      }),
     );
 
     // Process images
@@ -174,7 +177,7 @@ export class ArchiveProcessor {
 
   async processRAR(
     inputPath: string,
-    outputPath: string
+    outputPath: string,
   ): Promise<{
     imagesProcessed: number;
     imagesSkipped: number;
@@ -184,15 +187,30 @@ export class ArchiveProcessor {
     const images: ImageInfo[] = [];
     let originalSize = 0;
 
-    // Read RAR file into memory
-    const rarBuffer = await fs.readFile(inputPath);
-    // Convert Buffer to ArrayBuffer
-    const rarData = rarBuffer.buffer.slice(rarBuffer.byteOffset, rarBuffer.byteOffset + rarBuffer.byteLength);
+    // Check file size to determine extraction method
+    const stats = await fs.stat(inputPath);
+    const TWO_GB = 2 * 1024 * 1024 * 1024; // 2GB in bytes
+    const useFileExtractor = stats.size > TWO_GB;
 
-    // Extract images from RAR using node-unrar-js (in-memory extraction)
-    const extractor = await createExtractorFromData({
-      data: rarData,
-    });
+    let extractor;
+    if (useFileExtractor) {
+      // For large files (>2GB), use file-based extraction to avoid loading entire file into memory
+      extractor = await createExtractorFromFile({
+        filepath: inputPath,
+        targetPath: path.dirname(inputPath), // Required but not used for extraction
+      });
+    } else {
+      // For smaller files, use in-memory extraction
+      const rarBuffer = await fs.readFile(inputPath);
+      // Convert Buffer to ArrayBuffer
+      const rarData = rarBuffer.buffer.slice(
+        rarBuffer.byteOffset,
+        rarBuffer.byteOffset + rarBuffer.byteLength,
+      );
+      extractor = await createExtractorFromData({
+        data: rarData,
+      });
+    }
 
     const fileList = extractor.getFileList();
     const fileHeaders = [...fileList.fileHeaders];
@@ -205,7 +223,12 @@ export class ArchiveProcessor {
 
     if (imageFiles.length === 0) {
       // No image files found, return empty result
-      return { imagesProcessed: 0, imagesSkipped: 0, originalSize: 0, compressedSize: 0 };
+      return {
+        imagesProcessed: 0,
+        imagesSkipped: 0,
+        originalSize: 0,
+        compressedSize: 0,
+      };
     }
 
     // Extract all image files at once (in-memory extraction returns actual file data)
@@ -231,7 +254,7 @@ export class ArchiveProcessor {
       a.name.localeCompare(b.name, undefined, {
         numeric: true,
         sensitivity: "base",
-      })
+      }),
     );
 
     // Process images (same logic as processCBZ)
@@ -301,7 +324,7 @@ export class ArchiveProcessor {
 
   async processCBR(
     inputPath: string,
-    outputPath: string
+    outputPath: string,
   ): Promise<{
     imagesProcessed: number;
     imagesSkipped: number;
@@ -311,7 +334,7 @@ export class ArchiveProcessor {
     // CBR files can be either ZIP or RAR archives
     // Try ZIP first (many CBR files are actually ZIP files), then try RAR
     const isZip = await this.isZipFile(inputPath);
-    
+
     if (isZip) {
       // It's a ZIP file, process as CBZ
       return await this.processCBZ(inputPath, outputPath);

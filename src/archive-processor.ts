@@ -244,8 +244,21 @@ export class ArchiveProcessor {
       // Process extracted files differently based on extraction method
       if (useFileExtractor && tempDir) {
         // File-based extraction: files are written to disk, read them from temp directory
+        const totalFiles = extractedFiles.length;
+        let extractedCount = 0;
+
         for (const file of extractedFiles) {
           if (!file.fileHeader.flags.directory) {
+            extractedCount++;
+            const percentage = Math.round((extractedCount / totalFiles) * 100);
+
+            // Report extraction progress
+            if (this.progressCallback) {
+              process.stdout.write(
+                `\r  Extracting image ${extractedCount}/${totalFiles} (${percentage}%) - ${path.basename(inputPath)}`,
+              );
+            }
+
             const extractedFilePath = path.join(tempDir, file.fileHeader.name);
             if (await fs.pathExists(extractedFilePath)) {
               const buffer = await fs.readFile(extractedFilePath);
@@ -257,6 +270,11 @@ export class ArchiveProcessor {
               });
             }
           }
+        }
+
+        // Clear the extraction progress line
+        if (this.progressCallback && extractedCount > 0) {
+          process.stdout.write("\n");
         }
       } else {
         // In-memory extraction: extraction field contains Uint8Array with file data

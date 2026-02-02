@@ -35,6 +35,9 @@ declare module "node-unrar-js" {
 
   export interface ExtractorFromFileOptions {
     filepath: string;
+    targetPath?: string;
+    password?: string;
+    filenameTransform?: (filename: string) => string;
   }
 
   export interface ExtractorFromDataOptions {
@@ -44,11 +47,10 @@ declare module "node-unrar-js" {
   }
 
   export function createExtractorFromFile(
-    options: ExtractorFromFileOptions
+    options: ExtractorFromFileOptions,
   ): Promise<Extractor>;
 
   export function createExtractorFromData(
-    options: ExtractorFromDataOptions
+    options: ExtractorFromDataOptions,
   ): Promise<Extractor>;
 }
-

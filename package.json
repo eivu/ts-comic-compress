@@ -1,5 +1,5 @@
 {
-  "name": "ts-comic-compress",
+  "name": "@eivu/ts-comic-compress",
   "version": "1.0.0",
   "description": "Compresses comic books (CBR or CBZ extension) by using webp and decreasing the target height",
   "main": "dist/index.js",

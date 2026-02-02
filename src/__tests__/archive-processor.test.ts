@@ -311,7 +311,7 @@ describe("ArchiveProcessor", () => {
       stdoutSpy.mockRestore();
     });
 
-    it("should NOT write extraction progress to stdout when callback is provided", async () => {
+    it("should show extraction status even when callback is provided", async () => {
       const { createExtractorFromFile } = require("node-unrar-js");
 
       // Use the default archiveProcessor which HAS a progress callback
@@ -354,11 +354,17 @@ describe("ArchiveProcessor", () => {
 
       await archiveProcessor.processRAR(mockInputPath, mockOutputPath);
 
-      // Verify extraction progress was NOT displayed (no "Extracting image" messages)
-      const extractingCalls = stdoutSpy.mock.calls.filter((call) =>
-        call[0]?.toString().includes("Extracting image"),
+      // Verify extraction status is shown (extraction status is always shown,
+      // it's separate from and doesn't conflict with the image processing callback)
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Opening RAR archive"),
       );
-      expect(extractingCalls.length).toBe(0);
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Analyzing archive contents"),
+      );
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Found 2 image files"),
+      );
 
       stdoutSpy.mockRestore();
     });

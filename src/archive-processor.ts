@@ -188,6 +188,9 @@ export class ArchiveProcessor {
     const images: ImageInfo[] = [];
     let originalSize = 0;
 
+    // Show status only when no custom callback (CLI mode)
+    const showStatus = true; //!this.progressCallback;
+
     // Check file size to determine extraction method
     const stats = await fs.stat(inputPath);
     const TWO_GB = 2 * 1024 * 1024 * 1024; // 2GB in bytes
@@ -196,6 +199,12 @@ export class ArchiveProcessor {
     let tempDir: string | null = null;
 
     try {
+      if (showStatus) {
+        process.stdout.write(
+          `  Opening RAR archive (${(stats.size / (1024 * 1024)).toFixed(1)} MB)...\n`,
+        );
+      }
+
       let extractor;
       if (useFileExtractor) {
         // For large files (>2GB), use file-based extraction which writes to disk
@@ -217,6 +226,10 @@ export class ArchiveProcessor {
         });
       }
 
+      if (showStatus) {
+        process.stdout.write(`  Analyzing archive contents...\n`);
+      }
+
       const fileList = extractor.getFileList();
       const fileHeaders = [...fileList.fileHeaders];
 
@@ -236,6 +249,12 @@ export class ArchiveProcessor {
         };
       }
 
+      if (showStatus) {
+        process.stdout.write(
+          `  Found ${imageFiles.length} image file${imageFiles.length !== 1 ? "s" : ""}...\n`,
+        );
+      }
+
       // Extract all image files
       const imageFileNames = imageFiles.map((fileHeader) => fileHeader.name);
       const extracted = extractor.extract({ files: imageFileNames });
@@ -244,6 +263,10 @@ export class ArchiveProcessor {
       // Process extracted files differently based on extraction method
       if (useFileExtractor && tempDir) {
         // File-based extraction: files are written to disk, read them from temp directory
+        if (showStatus) {
+          process.stdout.write(`  Extracting files to disk...\n`);
+        }
+
         const totalFiles = extractedFiles.length;
         let extractedCount = 0;
 
@@ -252,10 +275,11 @@ export class ArchiveProcessor {
             extractedCount++;
             const percentage = Math.round((extractedCount / totalFiles) * 100);
 
-            // Report extraction progress
-            if (this.progressCallback) {
+            // Report extraction progress to stdout only if no custom callback is provided
+            // (callback users have their own UI and don't want stdout interference)
+            if (showStatus) {
               process.stdout.write(
-                `\r  Extracting image ${extractedCount}/${totalFiles} (${percentage}%) - ${path.basename(inputPath)}`,
+                `\r  Extracting image ${extractedCount}/${totalFiles} (${percentage}%)`,
               );
             }
 
@@ -272,12 +296,18 @@ export class ArchiveProcessor {
           }
         }
 
-        // Clear the extraction progress line
-        if (this.progressCallback && extractedCount > 0) {
-          process.stdout.write("\n");
+        // Clear the extraction progress line and show completion
+        if (showStatus && extractedCount > 0) {
+          process.stdout.write(
+            `\r  Extracted ${extractedCount} image${extractedCount !== 1 ? "s" : ""} successfully\n`,
+          );
         }
       } else {
         // In-memory extraction: extraction field contains Uint8Array with file data
+        if (showStatus) {
+          process.stdout.write(`  Loading images into memory...\n`);
+        }
+
         for (const file of extractedFiles) {
           if (file.extraction && !file.fileHeader.flags.directory) {
             const buffer = Buffer.from(file.extraction);

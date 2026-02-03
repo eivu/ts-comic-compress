@@ -1,5 +1,5 @@
-import { ImageConverter } from "../image-converter";
-import { ImageInfo } from "../types";
+import { ImageConverter } from "../src/image-converter";
+import { ImageInfo } from "../src/types";
 import sharp from "sharp";
 
 // Mock sharp

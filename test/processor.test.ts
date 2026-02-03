@@ -1,11 +1,11 @@
-import { ComicProcessor } from "../processor";
-import { ProcessorOptions } from "../types";
+import { ComicProcessor } from "../src/processor";
+import { ProcessorOptions } from "../src/types";
 
 // Mock dependencies
-jest.mock("../image-converter");
-jest.mock("../archive-processor");
-jest.mock("../pdf-processor");
-jest.mock("../logger");
+jest.mock("../src/image-converter");
+jest.mock("../src/archive-processor");
+jest.mock("../src/pdf-processor");
+jest.mock("../src/logger");
 
 describe("ComicProcessor", () => {
   let processor: ComicProcessor;

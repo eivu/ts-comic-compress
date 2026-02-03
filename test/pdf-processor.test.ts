@@ -1,9 +1,9 @@
-import { PDFProcessor } from "../pdf-processor";
-import { ImageConverter } from "../image-converter";
-import { ProgressCallback } from "../types";
+import { PDFProcessor } from "../src/pdf-processor";
+import { ImageConverter } from "../src/image-converter";
+import { ProgressCallback } from "../src/types";
 
 // Mock dependencies
-jest.mock("../image-converter");
+jest.mock("../src/image-converter");
 
 const mockImageConverter = {
   shouldProcess: jest.fn(),

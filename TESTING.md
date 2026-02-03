@@ -28,16 +28,17 @@ npm run test:coverage
 
 ## Test Structure
 
-Tests are located in `src/__tests__/` directory:
+Tests are located in `test/` directory:
 
 ```
-src/__tests__/
+test/
 ├── logger.test.ts              # Logger utility tests
 ├── image-converter.test.ts     # Image conversion tests
 ├── archive-processor.test.ts   # Archive processing tests
 ├── pdf-processor.test.ts       # PDF processing tests
 ├── processor.test.ts           # Main processor tests
 └── __mocks__/                  # Mock implementations
+    ├── node-unrar-js.ts       # node-unrar-js mock
     └── pdfjs-dist.ts          # pdfjs-dist mock
 ```
 
@@ -60,7 +61,7 @@ Test files should follow the pattern: `[module-name].test.ts`
 ### Example Test
 
 ```typescript
-import { Logger } from "../logger";
+import { Logger } from "../src/logger";
 
 describe("Logger", () => {
   let logger: Logger;
@@ -91,7 +92,7 @@ jest.mock("fs-extra");
 
 ### pdfjs-dist
 
-The `pdfjs-dist` library is mocked in `src/__tests__/__mocks__/pdfjs-dist.ts` to avoid ESM module issues during testing.
+The `pdfjs-dist` library is mocked in `test/__mocks__/pdfjs-dist.ts` to avoid ESM module issues during testing.
 
 ## CI/CD Integration
 
@@ -120,7 +121,7 @@ To debug a specific test:
 
 ```bash
 # Run a specific test file
-npx jest src/__tests__/logger.test.ts
+npx jest test/logger.test.ts
 
 # Run tests matching a pattern
 npx jest --testNamePattern="should log info"

@@ -1,10 +1,10 @@
-import { ArchiveProcessor } from "../archive-processor";
-import { ImageConverter } from "../image-converter";
-import { ProgressCallback } from "../types";
+import { ArchiveProcessor } from "../src/archive-processor";
+import { ImageConverter } from "../src/image-converter";
+import { ProgressCallback } from "../src/types";
 import * as path from "path";
 
 // Mock dependencies
-jest.mock("../image-converter");
+jest.mock("../src/image-converter");
 jest.mock("fs-extra");
 jest.mock("os");
 jest.mock("node-unrar-js");

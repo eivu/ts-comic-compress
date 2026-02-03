@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/eivu/ts-comic-compress/compare/v1.1.1...v1.1.2) (2026-02-03)
+
+
+### Bug Fixes
+
+* **workflow:** Attempt [#3](https://github.com/eivu/ts-comic-compress/issues/3) ([#9](https://github.com/eivu/ts-comic-compress/issues/9)) ([5cb7525](https://github.com/eivu/ts-comic-compress/commit/5cb7525c3605851d0fce5301d0e66e74a2f936ad))
+
 ## [1.1.1](https://github.com/eivu/ts-comic-compress/compare/v1.1.0...v1.1.1) (2026-02-03)
 
 

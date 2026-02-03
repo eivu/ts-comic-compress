@@ -4,7 +4,7 @@
   "description": "Compresses comic books (CBR or CBZ extension) by using webp and decreasing the target height",
   "main": "dist/index.js",
   "bin": {
-    "comic-compress": "./dist/index.js"
+    "comic-compress": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

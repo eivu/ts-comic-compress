@@ -1,0 +1,51 @@
+# Source files (ship compiled dist/ instead)
+src/
+
+# Tests
+**/__tests__/
+**/__mocks__/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+
+# Development configuration
+.github/
+.releaserc.json
+jest.config.js
+tsconfig.json
+.gitignore
+.npmignore
+
+# Documentation (keep README.md)
+TESTING.md
+SEMANTIC_RELEASE.md
+
+# Dependencies
+node_modules/
+
+# Build artifacts we don't need
+*.tsbuildinfo
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+.cache/

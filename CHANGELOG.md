@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/eivu/ts-comic-compress/compare/v1.1.0...v1.1.1) (2026-02-03)
+
+
+### Bug Fixes
+
+* **publishing:** Trying to use oidc for publshing to npm ([#8](https://github.com/eivu/ts-comic-compress/issues/8)) ([0ad8f24](https://github.com/eivu/ts-comic-compress/commit/0ad8f24a9b2b1eefd8675ecd25350923b5f3a56d)), closes [/#diff-87db21a973eed4fef5f32b267aa60fcee5cbdf03c67fafdc2a9b553bb0b15f34R46](https://github.com///issues/diff-87db21a973eed4fef5f32b267aa60fcee5cbdf03c67fafdc2a9b553bb0b15f34R46)
+
 # [1.1.0](https://github.com/eivu/ts-comic-compress/compare/v1.0.0...v1.1.0) (2026-02-03)
 
 

@@ -2,8 +2,7 @@
 src/
 
 # Tests
-**/__tests__/
-**/__mocks__/
+test/
 *.test.ts
 *.test.js
 *.spec.ts

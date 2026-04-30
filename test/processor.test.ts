@@ -1,4 +1,6 @@
 import { ComicProcessor } from "../src/processor";
+import { ArchiveProcessor } from "../src/archive-processor";
+import { PDFProcessor } from "../src/pdf-processor";
 import { ProcessorOptions } from "../src/types";
 
 // Mock dependencies
@@ -23,6 +25,7 @@ describe("ComicProcessor", () => {
       parallel: false,
       renameOriginal: false,
       moveOriginal: false,
+      raiseException: false,
       targetHeight: undefined,
     };
 
@@ -62,6 +65,33 @@ describe("ComicProcessor", () => {
       const options = { ...defaultOptions, parallel: true };
       processor = new ComicProcessor(options);
       expect(processor).toBeInstanceOf(ComicProcessor);
+    });
+
+    it("should forward raiseException=false to sub-processors by default", () => {
+      processor = new ComicProcessor(defaultOptions);
+
+      const archiveCall = (ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >).mock.calls.at(-1);
+      const pdfCall = (PDFProcessor as jest.MockedClass<typeof PDFProcessor>)
+        .mock.calls.at(-1);
+
+      expect(archiveCall?.[2]).toBe(false);
+      expect(pdfCall?.[2]).toBe(false);
+    });
+
+    it("should forward raiseException=true to sub-processors", () => {
+      const options = { ...defaultOptions, raiseException: true };
+      processor = new ComicProcessor(options);
+
+      const archiveCall = (ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >).mock.calls.at(-1);
+      const pdfCall = (PDFProcessor as jest.MockedClass<typeof PDFProcessor>)
+        .mock.calls.at(-1);
+
+      expect(archiveCall?.[2]).toBe(true);
+      expect(pdfCall?.[2]).toBe(true);
     });
   });
 

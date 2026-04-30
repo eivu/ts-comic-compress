@@ -1,6 +1,6 @@
 import { ArchiveProcessor } from "../src/archive-processor";
 import { ImageConverter } from "../src/image-converter";
-import { ProgressCallback } from "../src/types";
+import { ImageSkippedError, ProgressCallback } from "../src/types";
 import * as path from "path";
 
 // Mock dependencies
@@ -395,6 +395,146 @@ describe("ArchiveProcessor", () => {
         originalSize: 0,
         compressedSize: 0,
       });
+    });
+  });
+
+  describe("raiseException option", () => {
+    const mockInputPath = "/path/to/test.rar";
+    const mockOutputPath = "/path/to/output.cbz";
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      os.tmpdir.mockReturnValue("/tmp");
+      fs.mkdtemp.mockResolvedValue("/tmp/rar-extract-test123");
+      fs.ensureDir.mockResolvedValue(undefined);
+      fs.stat.mockResolvedValue({ size: 1024 * 1024 * 1024 }); // 1GB (in-memory path)
+      fs.remove.mockResolvedValue(undefined);
+      fs.readFile.mockResolvedValue(Buffer.from("mock rar data"));
+      fs.createWriteStream.mockReturnValue(createMockWriteStream());
+    });
+
+    function buildExtractorWithImages(names: string[]) {
+      const { createExtractorFromData } = require("node-unrar-js");
+      const headers = names.map((name) => ({
+        name,
+        flags: { directory: false },
+      }));
+      const files = names.map((name, idx) => ({
+        fileHeader: { name, flags: { directory: false } },
+        extraction: new Uint8Array([idx + 1, idx + 2, idx + 3]),
+      }));
+      const mockExtractor = {
+        getFileList: jest.fn().mockReturnValue({ fileHeaders: headers }),
+        extract: jest.fn().mockReturnValue({ files }),
+      };
+      createExtractorFromData.mockResolvedValue(mockExtractor);
+      return mockExtractor;
+    }
+
+    it("should not throw when raiseException is false and image is skipped", async () => {
+      buildExtractorWithImages(["image1.jpg", "image2.jpg"]);
+      mockImageConverter.shouldProcess.mockResolvedValue(false);
+
+      const processor = new ArchiveProcessor(
+        mockImageConverter,
+        mockProgressCallback,
+        false,
+      );
+
+      const result = await processor.processRAR(mockInputPath, mockOutputPath);
+
+      expect(result.imagesProcessed).toBe(0);
+      expect(result.imagesSkipped).toBe(2);
+    });
+
+    it("should throw ImageSkippedError when raiseException is true and an image is skipped", async () => {
+      buildExtractorWithImages(["image1.jpg", "image2.jpg"]);
+      mockImageConverter.shouldProcess.mockResolvedValue(false);
+
+      const processor = new ArchiveProcessor(
+        mockImageConverter,
+        mockProgressCallback,
+        true,
+      );
+
+      await expect(
+        processor.processRAR(mockInputPath, mockOutputPath),
+      ).rejects.toThrow(ImageSkippedError);
+    });
+
+    it("should include the offending image name in the thrown error", async () => {
+      buildExtractorWithImages(["page_001.jpg", "page_002.jpg"]);
+      mockImageConverter.shouldProcess.mockResolvedValue(false);
+
+      const processor = new ArchiveProcessor(
+        mockImageConverter,
+        mockProgressCallback,
+        true,
+      );
+
+      await expect(
+        processor.processRAR(mockInputPath, mockOutputPath),
+      ).rejects.toMatchObject({
+        name: "ImageSkippedError",
+        imageName: "page_001.jpg",
+      });
+    });
+
+    it("should not throw when all images are processable even with raiseException=true", async () => {
+      buildExtractorWithImages(["image1.jpg", "image2.jpg"]);
+      mockImageConverter.shouldProcess.mockResolvedValue(true);
+      mockImageConverter.convertToWebP.mockResolvedValue(Buffer.from("webp"));
+
+      const processor = new ArchiveProcessor(
+        mockImageConverter,
+        mockProgressCallback,
+        true,
+      );
+
+      const result = await processor.processRAR(mockInputPath, mockOutputPath);
+
+      expect(result.imagesProcessed).toBe(2);
+      expect(result.imagesSkipped).toBe(0);
+    });
+
+    it("should throw on the first skipped image and stop processing the rest", async () => {
+      buildExtractorWithImages(["image1.jpg", "image2.jpg", "image3.jpg"]);
+      // First image is processable, second is skipped, third would also be skipped
+      mockImageConverter.shouldProcess
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false);
+      mockImageConverter.convertToWebP.mockResolvedValue(Buffer.from("webp"));
+
+      const processor = new ArchiveProcessor(
+        mockImageConverter,
+        mockProgressCallback,
+        true,
+      );
+
+      await expect(
+        processor.processRAR(mockInputPath, mockOutputPath),
+      ).rejects.toMatchObject({
+        name: "ImageSkippedError",
+        imageName: "image2.jpg",
+      });
+
+      // Only the first two images should have been queried; we bail after the second.
+      expect(mockImageConverter.shouldProcess).toHaveBeenCalledTimes(2);
+    });
+
+    it("should default raiseException to false when omitted", async () => {
+      buildExtractorWithImages(["image1.jpg"]);
+      mockImageConverter.shouldProcess.mockResolvedValue(false);
+
+      const processor = new ArchiveProcessor(
+        mockImageConverter,
+        mockProgressCallback,
+      );
+
+      await expect(
+        processor.processRAR(mockInputPath, mockOutputPath),
+      ).resolves.toMatchObject({ imagesSkipped: 1 });
     });
   });
 });

@@ -23,11 +23,13 @@ export class ComicProcessor {
     );
     this.archiveProcessor = new ArchiveProcessor(
       this.imageConverter,
-      this.createProgressCallback.bind(this)
+      this.createProgressCallback.bind(this),
+      options.raiseException
     );
     this.pdfProcessor = new PDFProcessor(
       this.imageConverter,
-      this.createProgressCallback.bind(this)
+      this.createProgressCallback.bind(this),
+      options.raiseException
     );
     this.stats = {
       filesProcessed: 0,

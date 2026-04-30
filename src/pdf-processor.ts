@@ -2,7 +2,7 @@ import * as fs from "fs-extra";
 import * as path from "path";
 import * as pdfjsLib from "pdfjs-dist";
 import { ImageConverter } from "./image-converter";
-import { ImageInfo, ProgressCallback } from "./types";
+import { ImageInfo, ImageSkippedError, ProgressCallback } from "./types";
 import * as yazl from "yazl";
 
 // Configure pdfjs worker for Node.js
@@ -12,7 +12,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
 export class PDFProcessor {
   constructor(
     private imageConverter: ImageConverter,
-    private progressCallback?: ProgressCallback
+    private progressCallback?: ProgressCallback,
+    private raiseException: boolean = false
   ) {}
 
   async processPDF(
@@ -150,6 +151,14 @@ export class PDFProcessor {
           });
           imagesProcessed++;
         } catch (error) {
+          if (this.raiseException) {
+            throw new ImageSkippedError(
+              image.name,
+              `WebP conversion failed: ${
+                error instanceof Error ? error.message : String(error)
+              }`
+            );
+          }
           // If conversion fails, keep original
           processedImages.push({
             name: image.name,
@@ -158,6 +167,12 @@ export class PDFProcessor {
           imagesSkipped++;
         }
       } else {
+        if (this.raiseException) {
+          throw new ImageSkippedError(
+            image.name,
+            "image format is not eligible for WebP conversion"
+          );
+        }
         processedImages.push({
           name: image.name,
           data: image.data,

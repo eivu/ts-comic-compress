@@ -15,6 +15,7 @@ This is a TypeScript port of the Rust-based [compress_comics](https://github.com
 - ✅ Progress reporting with detailed statistics
 - ✅ Skip existing files option
 - ✅ Rename original files option
+- ✅ Strict error mode: exit non-zero when any image is skipped (`--raise-exception`)
 
 ## Installation
 
@@ -52,6 +53,7 @@ comic-compress [options]
   -p, --parallel                Run in parallel, utilizing all computing resources
   --rename-original             Rename original files to *_original instead of copying
   --height <number>             Target height for images (maintains aspect ratio). If not specified, images are not resized
+  -e, --raise-exception         Exit with a non-zero status code if any image is skipped during processing
   -m, --move-original           Move successfully compressed objects to a subfolder named done
   -h, --help                    Display help for command
 ```
@@ -86,6 +88,12 @@ npm start -- -i ./comics -o ./compressed -r -p -s
 
 ```bash
 npm start -- -i comic.cbz -o output --rename-original
+```
+
+#### Fail fast if any image is skipped (useful for CI):
+
+```bash
+npm start -- -i comic.cbz -o output --raise-exception
 ```
 
 ## Output

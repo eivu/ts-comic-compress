@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/eivu/ts-comic-compress/compare/v1.1.2...v1.2.0) (2026-05-01)
+
+
+### Features
+
+*  Skipped images now raise exceptions ([#11](https://github.com/eivu/ts-comic-compress/issues/11)) ([19f7b6c](https://github.com/eivu/ts-comic-compress/commit/19f7b6c5af99d89078df235a854cf9bf1ce2624b))
+
 ## [1.1.2](https://github.com/eivu/ts-comic-compress/compare/v1.1.1...v1.1.2) (2026-02-03)
 
 

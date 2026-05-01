@@ -3,7 +3,12 @@ import * as path from "path";
 import { ImageConverter } from "./image-converter";
 import { ArchiveProcessor } from "./archive-processor";
 import { PDFProcessor } from "./pdf-processor";
-import { ProcessorOptions, ProcessingStats, FileStats } from "./types";
+import {
+  ProcessorOptions,
+  ProcessingStats,
+  FileStats,
+  ImageSkippedError,
+} from "./types";
 import { Logger } from "./logger";
 import chalk from "chalk";
 
@@ -23,11 +28,13 @@ export class ComicProcessor {
     );
     this.archiveProcessor = new ArchiveProcessor(
       this.imageConverter,
-      this.createProgressCallback.bind(this)
+      this.createProgressCallback.bind(this),
+      options.raiseException
     );
     this.pdfProcessor = new PDFProcessor(
       this.imageConverter,
-      this.createProgressCallback.bind(this)
+      this.createProgressCallback.bind(this),
+      options.raiseException
     );
     this.stats = {
       filesProcessed: 0,
@@ -257,6 +264,12 @@ export class ComicProcessor {
           error instanceof Error ? error.message : String(error)
         }`
       );
+      // ImageSkippedError signals the user explicitly opted into hard-failing
+      // via --raise-exception; propagate so the CLI exits non-zero instead of
+      // silently continuing and printing a misleading summary.
+      if (error instanceof ImageSkippedError) {
+        throw error;
+      }
     }
   }
 

@@ -8,12 +8,13 @@ import {
   createExtractorFromFile,
 } from "node-unrar-js";
 import { ImageConverter } from "./image-converter";
-import { ImageInfo, ProgressCallback } from "./types";
+import { ImageInfo, ImageSkippedError, ProgressCallback } from "./types";
 
 export class ArchiveProcessor {
   constructor(
     private imageConverter: ImageConverter,
     private progressCallback?: ProgressCallback,
+    private raiseException: boolean = false,
   ) {}
 
   async processCBZ(
@@ -119,6 +120,12 @@ export class ArchiveProcessor {
         });
         imagesProcessed++;
       } else {
+        if (this.raiseException) {
+          throw new ImageSkippedError(
+            image.name,
+            "image format is not eligible for WebP conversion",
+          );
+        }
         processedImages.push({
           name: image.name,
           data: image.data,
@@ -341,6 +348,12 @@ export class ArchiveProcessor {
           });
           imagesProcessed++;
         } else {
+          if (this.raiseException) {
+            throw new ImageSkippedError(
+              image.name,
+              "image format is not eligible for WebP conversion",
+            );
+          }
           processedImages.push({
             name: image.name,
             data: image.data,

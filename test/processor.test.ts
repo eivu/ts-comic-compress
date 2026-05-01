@@ -1,11 +1,16 @@
 import { ComicProcessor } from "../src/processor";
-import { ProcessorOptions } from "../src/types";
+import { ArchiveProcessor } from "../src/archive-processor";
+import { PDFProcessor } from "../src/pdf-processor";
+import { ImageSkippedError, ProcessorOptions } from "../src/types";
 
 // Mock dependencies
 jest.mock("../src/image-converter");
 jest.mock("../src/archive-processor");
 jest.mock("../src/pdf-processor");
 jest.mock("../src/logger");
+jest.mock("fs-extra");
+
+const fs = require("fs-extra");
 
 describe("ComicProcessor", () => {
   let processor: ComicProcessor;
@@ -23,6 +28,7 @@ describe("ComicProcessor", () => {
       parallel: false,
       renameOriginal: false,
       moveOriginal: false,
+      raiseException: false,
       targetHeight: undefined,
     };
 
@@ -63,6 +69,33 @@ describe("ComicProcessor", () => {
       processor = new ComicProcessor(options);
       expect(processor).toBeInstanceOf(ComicProcessor);
     });
+
+    it("should forward raiseException=false to sub-processors by default", () => {
+      processor = new ComicProcessor(defaultOptions);
+
+      const archiveCall = (ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >).mock.calls.at(-1);
+      const pdfCall = (PDFProcessor as jest.MockedClass<typeof PDFProcessor>)
+        .mock.calls.at(-1);
+
+      expect(archiveCall?.[2]).toBe(false);
+      expect(pdfCall?.[2]).toBe(false);
+    });
+
+    it("should forward raiseException=true to sub-processors", () => {
+      const options = { ...defaultOptions, raiseException: true };
+      processor = new ComicProcessor(options);
+
+      const archiveCall = (ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >).mock.calls.at(-1);
+      const pdfCall = (PDFProcessor as jest.MockedClass<typeof PDFProcessor>)
+        .mock.calls.at(-1);
+
+      expect(archiveCall?.[2]).toBe(true);
+      expect(pdfCall?.[2]).toBe(true);
+    });
   });
 
   describe("methods", () => {
@@ -80,6 +113,177 @@ describe("ComicProcessor", () => {
 
     it("should have printSummary method", () => {
       expect(typeof processor.printSummary).toBe("function");
+    });
+  });
+
+  describe("error propagation in processSingleFile", () => {
+    const inputPath = "/path/to/test.cbz";
+
+    beforeEach(() => {
+      fs.pathExists.mockResolvedValue(false);
+      fs.stat.mockResolvedValue({ size: 1024 });
+      fs.copy.mockResolvedValue(undefined);
+      fs.remove.mockResolvedValue(undefined);
+      fs.move.mockResolvedValue(undefined);
+      fs.ensureDir.mockResolvedValue(undefined);
+    });
+
+    it("should propagate ImageSkippedError out of processFile so the CLI can exit non-zero", async () => {
+      const archiveMock = ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >;
+      archiveMock.prototype.processCBZ = jest
+        .fn()
+        .mockRejectedValue(
+          new ImageSkippedError("page_001.jpg", "unsupported format"),
+        );
+
+      processor = new ComicProcessor({
+        ...defaultOptions,
+        raiseException: true,
+      });
+
+      await expect(processor.processFile(inputPath)).rejects.toBeInstanceOf(
+        ImageSkippedError,
+      );
+    });
+
+    it("should still swallow non-ImageSkippedError failures so a single bad file doesn't abort a batch", async () => {
+      const archiveMock = ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >;
+      archiveMock.prototype.processCBZ = jest
+        .fn()
+        .mockRejectedValue(new Error("transient io failure"));
+
+      processor = new ComicProcessor(defaultOptions);
+
+      await expect(processor.processFile(inputPath)).resolves.toBeUndefined();
+    });
+
+    it("should propagate ImageSkippedError from the PDF path as well", async () => {
+      const pdfMock = PDFProcessor as jest.MockedClass<typeof PDFProcessor>;
+      pdfMock.prototype.processPDF = jest
+        .fn()
+        .mockRejectedValue(
+          new ImageSkippedError("page_001.jpg", "unsupported format"),
+        );
+
+      processor = new ComicProcessor({
+        ...defaultOptions,
+        raiseException: true,
+      });
+
+      await expect(
+        processor.processFile("/path/to/test.pdf"),
+      ).rejects.toBeInstanceOf(ImageSkippedError);
+    });
+
+    it("should propagate ImageSkippedError out of processFilesParallel and skip subsequent batches", async () => {
+      // Build 6 files so we get two batches of 4 (batch size is 4).
+      // Batch 1: good, good, bad, good   -> rejects via Promise.all
+      // Batch 2: good, good              -> must NOT be touched
+      const files = [
+        "/path/to/b1_good_a.cbz",
+        "/path/to/b1_good_b.cbz",
+        "/path/to/b1_bad.cbz",
+        "/path/to/b1_good_c.cbz",
+        "/path/to/b2_good_a.cbz",
+        "/path/to/b2_good_b.cbz",
+      ];
+
+      fs.readdir.mockResolvedValue(
+        files.map((f) => ({
+          name: f.split("/").pop()!,
+          isDirectory: () => false,
+          isFile: () => true,
+        })),
+      );
+
+      const archiveMock = ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >;
+      const processCBZ = jest.fn(async (input: string, _output: string) => {
+        if (input.endsWith("b1_bad.cbz")) {
+          throw new ImageSkippedError("page_001.jpg", "unsupported format");
+        }
+        return {
+          imagesProcessed: 1,
+          imagesSkipped: 0,
+          originalSize: 1024,
+          compressedSize: 512,
+        };
+      });
+      archiveMock.prototype.processCBZ = processCBZ;
+
+      processor = new ComicProcessor({
+        ...defaultOptions,
+        parallel: true,
+        raiseException: true,
+      });
+
+      await expect(
+        processor.processDirectory("/path/to"),
+      ).rejects.toBeInstanceOf(ImageSkippedError);
+
+      // Files in batch 2 must never have been dispatched.
+      const calledInputs = processCBZ.mock.calls.map((c) => c[0]);
+      expect(calledInputs).not.toContain("/path/to/b2_good_a.cbz");
+      expect(calledInputs).not.toContain("/path/to/b2_good_b.cbz");
+    });
+
+    it("should propagate ImageSkippedError thrown mid-batch and stop processing remaining files (parallel=false)", async () => {
+      const goodPath = "/path/to/good.cbz";
+      const badPath = "/path/to/bad.cbz";
+      const laterPath = "/path/to/later.cbz";
+
+      // Make the directory walk return three files.
+      fs.readdir.mockResolvedValue([
+        { name: "good.cbz", isDirectory: () => false, isFile: () => true },
+        { name: "bad.cbz", isDirectory: () => false, isFile: () => true },
+        { name: "later.cbz", isDirectory: () => false, isFile: () => true },
+      ]);
+
+      const archiveMock = ArchiveProcessor as jest.MockedClass<
+        typeof ArchiveProcessor
+      >;
+      const processCBZ = jest.fn(async (input: string, _output: string) => {
+        if (input.endsWith("good.cbz")) {
+          return {
+            imagesProcessed: 1,
+            imagesSkipped: 0,
+            originalSize: 1024,
+            compressedSize: 512,
+          };
+        }
+        if (input.endsWith("bad.cbz")) {
+          throw new ImageSkippedError("page_002.jpg", "unsupported format");
+        }
+        return {
+          imagesProcessed: 1,
+          imagesSkipped: 0,
+          originalSize: 1024,
+          compressedSize: 512,
+        };
+      });
+      archiveMock.prototype.processCBZ = processCBZ;
+
+      processor = new ComicProcessor({
+        ...defaultOptions,
+        raiseException: true,
+      });
+
+      await expect(
+        processor.processDirectory("/path/to"),
+      ).rejects.toBeInstanceOf(ImageSkippedError);
+
+      // The third file must NOT have been processed because we bailed on the
+      // second file's ImageSkippedError.
+      const processedInputs = processCBZ.mock.calls.map((c) => c[0]);
+      expect(processedInputs).toEqual(
+        expect.arrayContaining([goodPath, badPath]),
+      );
+      expect(processedInputs).not.toEqual(expect.arrayContaining([laterPath]));
     });
   });
 

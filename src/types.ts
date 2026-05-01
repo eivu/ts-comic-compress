@@ -23,6 +23,7 @@ export interface ProcessorOptions {
   parallel: boolean;
   renameOriginal: boolean;
   moveOriginal: boolean;
+  raiseException: boolean;
   targetHeight?: number;
 }
 
@@ -33,3 +34,13 @@ export interface ImageInfo {
 }
 
 export type ProgressCallback = (current: number, total: number) => void;
+
+export class ImageSkippedError extends Error {
+  constructor(
+    public readonly imageName: string,
+    public readonly reason: string,
+  ) {
+    super(`Image skipped during processing: ${imageName} (${reason})`);
+    this.name = "ImageSkippedError";
+  }
+}

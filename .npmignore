@@ -12,9 +12,13 @@ test/
 .github/
 .releaserc.json
 jest.config.js
+vitest.config.ts
 tsconfig.json
 .gitignore
 .npmignore
+scripts/
+converted_comics/
+coverage/
 
 # Documentation (keep README.md)
 TESTING.md

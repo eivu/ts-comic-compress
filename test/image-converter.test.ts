@@ -1,33 +1,43 @@
-import { ImageConverter } from "../src/image-converter";
-import { ImageInfo } from "../src/types";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { ImageConverter } from "../src/image-converter.js";
+import { ImageInfo } from "../src/types.js";
 import sharp from "sharp";
 
-// Mock sharp
-jest.mock("sharp");
+vi.mock("sharp", () => {
+  const sharpFn = vi.fn();
+  // sharp.kernel.lanczos3 is read by ImageConverter for resize options.
+  (sharpFn as unknown as { kernel: Record<string, string> }).kernel = {
+    lanczos3: "lanczos3",
+  };
+  return { default: sharpFn };
+});
 
 describe("ImageConverter", () => {
   let converter: ImageConverter;
-  let mockSharpInstance: any;
+  let mockSharpInstance: {
+    metadata: ReturnType<typeof vi.fn>;
+    resize: ReturnType<typeof vi.fn>;
+    webp: ReturnType<typeof vi.fn>;
+    toBuffer: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
-    // Reset mocks
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    // Create mock sharp instance
     mockSharpInstance = {
-      metadata: jest.fn(),
-      resize: jest.fn(),
-      webp: jest.fn(),
-      toBuffer: jest.fn(),
+      metadata: vi.fn(),
+      resize: vi.fn(),
+      webp: vi.fn(),
+      toBuffer: vi.fn(),
     };
 
-    // Make methods chainable
     mockSharpInstance.resize.mockReturnValue(mockSharpInstance);
     mockSharpInstance.webp.mockReturnValue(mockSharpInstance);
     mockSharpInstance.toBuffer.mockResolvedValue(Buffer.from("webp-data"));
 
-    // Mock sharp constructor
-    (sharp as unknown as jest.Mock).mockReturnValue(mockSharpInstance);
+    (sharp as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
+      mockSharpInstance,
+    );
   });
 
   describe("constructor", () => {
@@ -85,7 +95,7 @@ describe("ImageConverter", () => {
       expect(sharp).toHaveBeenCalledWith(image.data);
       expect(mockSharpInstance.metadata).toHaveBeenCalled();
       expect(mockSharpInstance.resize).toHaveBeenCalledWith(undefined, 1080, {
-        kernel: sharp.kernel.lanczos3,
+        kernel: "lanczos3",
         withoutEnlargement: true,
       });
       expect(mockSharpInstance.webp).toHaveBeenCalledWith({ quality: 75 });

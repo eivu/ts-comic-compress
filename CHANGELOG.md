@@ -1,3 +1,25 @@
+# [2.0.0](https://github.com/eivu/ts-comic-compress/compare/v1.2.0...v2.0.0) (2026-05-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **Package is now ESM-only.** `package.json` sets `"type": "module"` and ships a strict `"exports"` map. CommonJS consumers can no longer `require()` this package; they must `import()` it (Node 18.18+) or migrate their consuming project to ESM.
+* **Minimum Node.js version is now 18.18.**
+* **Public entry points are now declared via `exports`.** Consumers should use:
+  - `import { ComicProcessor } from "@eivu/ts-comic-compress"` for the full surface, or
+  - `import { ComicProcessor } from "@eivu/ts-comic-compress/processor"` for the focused subpath.
+  Reaching into `dist/*.js` directly is no longer supported.
+* **`chalk` upgraded from `^4` to `^5`** (ESM-only). No API changes; the import shape is unchanged.
+* **`pdfjs-dist` is now used via its modern ESM build**, with the worker source resolved through `createRequire(import.meta.url)`.
+* **Tests migrated from Jest to Vitest.** Test behavior is unchanged, but if you were hooking into the test runner downstream, the harness is now Vitest.
+* **`fs-extra` removed** in favor of a thin local wrapper around `node:fs/promises` (`src/fs-utils.ts`). No behavior change; one fewer CJS-only dependency.
+
+
+### Features
+
+* All compiled output is now native ESM (`import`/`export`) with `.js` specifiers in relative imports, no `require()`/`__importStar`/`__importDefault` plumbing in `dist/`.
+* `runCli()` is exported from the main entry, so consumers can drive the CLI programmatically. The `comic-compress` bin still auto-invokes it when the file is executed directly.
+
 # [1.2.0](https://github.com/eivu/ts-comic-compress/compare/v1.1.2...v1.2.0) (2026-05-01)
 
 

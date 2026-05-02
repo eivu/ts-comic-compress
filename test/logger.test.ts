@@ -1,17 +1,18 @@
-import { Logger } from "../src/logger";
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from "vitest";
+import { Logger } from "../src/logger.js";
 import chalk from "chalk";
 
 describe("Logger", () => {
   let logger: Logger;
-  let consoleErrorSpy: jest.SpyInstance;
-  let consoleLogSpy: jest.SpyInstance;
-  let consoleWarnSpy: jest.SpyInstance;
+  let consoleErrorSpy: MockInstance;
+  let consoleLogSpy: MockInstance;
+  let consoleWarnSpy: MockInstance;
 
   beforeEach(() => {
     logger = new Logger();
-    consoleErrorSpy = jest.spyOn(console, "error").mockImplementation();
-    consoleLogSpy = jest.spyOn(console, "log").mockImplementation();
-    consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {

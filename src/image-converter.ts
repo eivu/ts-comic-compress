@@ -1,5 +1,5 @@
-import sharp from 'sharp';
-import { ImageInfo } from './types';
+import sharp from "sharp";
+import type { ImageInfo } from "./types.js";
 
 export class ImageConverter {
   constructor(

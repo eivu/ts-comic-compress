@@ -1,8 +1,10 @@
 # TypeScript Comic Compress
 
-A TypeScript/Node.js command-line tool that compresses comic books (CBR or CBZ extension) by converting images to WebP format and optionally resizing them. Also supports PDF files.
+A TypeScript/Node.js command-line tool **and** library that compresses comic books (CBR or CBZ extension) by converting images to WebP format and optionally resizing them. Also supports PDF files.
 
 This is a TypeScript port of the Rust-based [compress_comics](https://github.com/erikvullings/compress_comics) project.
+
+> **2.0 is ESM-only.** The package now publishes as native ECMAScript modules and requires Node.js **>= 18.18**. If you were importing this package from a CommonJS project, see [Migrating from 1.x to 2.0](#migrating-from-1x-to-20).
 
 ## Features
 
@@ -19,24 +21,45 @@ This is a TypeScript port of the Rust-based [compress_comics](https://github.com
 
 ## Installation
 
-```bash
-npm install
-npm run build
-```
-
-Or install globally:
+Use as a library in your own ESM Node.js project:
 
 ```bash
-npm install -g .
+npm install @eivu/ts-comic-compress
 ```
 
-## Usage
+Or install globally for the CLI:
 
 ```bash
-npm start -- [options]
+npm install -g @eivu/ts-comic-compress
 ```
 
-Or if installed globally:
+## Library usage (ESM)
+
+```ts
+// main entry — every public class
+import { ComicProcessor, ImageSkippedError } from "@eivu/ts-comic-compress";
+
+// or import directly from the processor subpath if you want a smaller surface
+import { ComicProcessor } from "@eivu/ts-comic-compress/processor";
+
+const processor = new ComicProcessor({
+  outputDir: "./compressed",
+  quality: 75,
+  recursive: false,
+  skipExisting: false,
+  parallel: false,
+  renameOriginal: false,
+  moveOriginal: false,
+  raiseException: false,
+});
+
+await processor.processFile("./input.cbz");
+processor.printSummary();
+```
+
+The package is published as **ESM only** with a `type: "module"` declaration. Consumers must be ESM (i.e. their own `package.json` must have `"type": "module"`, or they must use `.mjs` files). It does **not** ship a CommonJS build.
+
+## CLI usage
 
 ```bash
 comic-compress [options]
@@ -176,12 +199,8 @@ See [TESTING.md](TESTING.md) for detailed testing documentation.
 ## Development
 
 ```bash
-# Run in development mode
+# Run in development mode (uses tsx to run TypeScript directly under ESM)
 npm run dev -- [options]
-
-# Watch mode (requires ts-node-dev or similar)
-npm install -D ts-node-dev
-ts-node-dev --respawn src/index.ts [options]
 ```
 
 ## Dependencies
@@ -191,9 +210,26 @@ ts-node-dev --respawn src/index.ts [options]
 - **yauzl**: ZIP file reading
 - **yazl**: ZIP file writing
 - **node-unrar-js**: RAR archive extraction
-- **pdfjs-dist**: PDF file processing
-- **fs-extra**: Enhanced file system operations
+- **pdfjs-dist**: PDF file processing (ESM build)
 - **chalk**: Terminal colors
+
+`fs-extra` was dropped in 2.0 in favor of a thin wrapper around `node:fs/promises` (`src/fs-utils.ts`), eliminating a CJS-only runtime dependency.
+
+## Migrating from 1.x to 2.0
+
+2.0 is the first ESM-native release. Behavior is identical to 1.2.x; the breaking changes are purely about how the package is consumed.
+
+| Change | 1.x | 2.0 |
+| --- | --- | --- |
+| Module format | CommonJS (`require`-able) | ESM only (`import`/dynamic `import()`) |
+| Minimum Node | (unspecified) | **>= 18.18** |
+| `package.json` | `"main"` only, no `"exports"` map | `"type": "module"` + `"exports"` map |
+| Public import | `require("@eivu/ts-comic-compress/dist/processor.js")` | `import "@eivu/ts-comic-compress"` or `import "@eivu/ts-comic-compress/processor"` |
+| chalk | `^4` (CJS) | `^5` (ESM-only) |
+| pdfjs-dist | `^4` via legacy CJS interop | `^4` ESM build, no `require()` interop |
+| Tests | Jest | Vitest |
+
+If you were reaching into `dist/processor.js` directly, switch to the public subpath import — `@eivu/ts-comic-compress/processor` — which is now contractually exposed via the package's `exports` map.
 
 ## License
 

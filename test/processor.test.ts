@@ -1,25 +1,45 @@
-import { ComicProcessor } from "../src/processor";
-import { ArchiveProcessor } from "../src/archive-processor";
-import { PDFProcessor } from "../src/pdf-processor";
-import { ImageSkippedError, ProcessorOptions } from "../src/types";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+  type MockedClass,
+} from "vitest";
+import { ComicProcessor } from "../src/processor.js";
+import { ArchiveProcessor } from "../src/archive-processor.js";
+import { PDFProcessor } from "../src/pdf-processor.js";
+import { ImageSkippedError, type ProcessorOptions } from "../src/types.js";
+import * as fsu from "../src/fs-utils.js";
 
-// Mock dependencies
-jest.mock("../src/image-converter");
-jest.mock("../src/archive-processor");
-jest.mock("../src/pdf-processor");
-jest.mock("../src/logger");
-jest.mock("fs-extra");
+vi.mock("../src/image-converter.js");
+vi.mock("../src/archive-processor.js");
+vi.mock("../src/pdf-processor.js");
+vi.mock("../src/logger.js");
+vi.mock("../src/fs-utils.js", () => ({
+  pathExists: vi.fn(),
+  stat: vi.fn(),
+  readFile: vi.fn(),
+  readdir: vi.fn(),
+  mkdtemp: vi.fn(),
+  ensureDir: vi.fn(),
+  remove: vi.fn(),
+  copy: vi.fn(),
+  move: vi.fn(),
+  createWriteStream: vi.fn(),
+}));
 
-const fs = require("fs-extra");
+const fs = fsu as unknown as Record<string, Mock>;
 
 describe("ComicProcessor", () => {
   let processor: ComicProcessor;
   let defaultOptions: ProcessorOptions;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
-    // Setup default options
     defaultOptions = {
       outputDir: "/output",
       quality: 75,
@@ -32,12 +52,11 @@ describe("ComicProcessor", () => {
       targetHeight: undefined,
     };
 
-    // Mock stdout.write to prevent console output during tests
-    jest.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("constructor", () => {
@@ -73,11 +92,12 @@ describe("ComicProcessor", () => {
     it("should forward raiseException=false to sub-processors by default", () => {
       processor = new ComicProcessor(defaultOptions);
 
-      const archiveCall = (ArchiveProcessor as jest.MockedClass<
-        typeof ArchiveProcessor
-      >).mock.calls.at(-1);
-      const pdfCall = (PDFProcessor as jest.MockedClass<typeof PDFProcessor>)
-        .mock.calls.at(-1);
+      const archiveCall = (
+        ArchiveProcessor as unknown as MockedClass<typeof ArchiveProcessor>
+      ).mock.calls.at(-1);
+      const pdfCall = (
+        PDFProcessor as unknown as MockedClass<typeof PDFProcessor>
+      ).mock.calls.at(-1);
 
       expect(archiveCall?.[2]).toBe(false);
       expect(pdfCall?.[2]).toBe(false);
@@ -87,11 +107,12 @@ describe("ComicProcessor", () => {
       const options = { ...defaultOptions, raiseException: true };
       processor = new ComicProcessor(options);
 
-      const archiveCall = (ArchiveProcessor as jest.MockedClass<
-        typeof ArchiveProcessor
-      >).mock.calls.at(-1);
-      const pdfCall = (PDFProcessor as jest.MockedClass<typeof PDFProcessor>)
-        .mock.calls.at(-1);
+      const archiveCall = (
+        ArchiveProcessor as unknown as MockedClass<typeof ArchiveProcessor>
+      ).mock.calls.at(-1);
+      const pdfCall = (
+        PDFProcessor as unknown as MockedClass<typeof PDFProcessor>
+      ).mock.calls.at(-1);
 
       expect(archiveCall?.[2]).toBe(true);
       expect(pdfCall?.[2]).toBe(true);
@@ -129,10 +150,10 @@ describe("ComicProcessor", () => {
     });
 
     it("should propagate ImageSkippedError out of processFile so the CLI can exit non-zero", async () => {
-      const archiveMock = ArchiveProcessor as jest.MockedClass<
+      const archiveMock = ArchiveProcessor as unknown as MockedClass<
         typeof ArchiveProcessor
       >;
-      archiveMock.prototype.processCBZ = jest
+      archiveMock.prototype.processCBZ = vi
         .fn()
         .mockRejectedValue(
           new ImageSkippedError("page_001.jpg", "unsupported format"),
@@ -149,10 +170,10 @@ describe("ComicProcessor", () => {
     });
 
     it("should still swallow non-ImageSkippedError failures so a single bad file doesn't abort a batch", async () => {
-      const archiveMock = ArchiveProcessor as jest.MockedClass<
+      const archiveMock = ArchiveProcessor as unknown as MockedClass<
         typeof ArchiveProcessor
       >;
-      archiveMock.prototype.processCBZ = jest
+      archiveMock.prototype.processCBZ = vi
         .fn()
         .mockRejectedValue(new Error("transient io failure"));
 
@@ -162,8 +183,10 @@ describe("ComicProcessor", () => {
     });
 
     it("should propagate ImageSkippedError from the PDF path as well", async () => {
-      const pdfMock = PDFProcessor as jest.MockedClass<typeof PDFProcessor>;
-      pdfMock.prototype.processPDF = jest
+      const pdfMock = PDFProcessor as unknown as MockedClass<
+        typeof PDFProcessor
+      >;
+      pdfMock.prototype.processPDF = vi
         .fn()
         .mockRejectedValue(
           new ImageSkippedError("page_001.jpg", "unsupported format"),
@@ -180,9 +203,6 @@ describe("ComicProcessor", () => {
     });
 
     it("should propagate ImageSkippedError out of processFilesParallel and skip subsequent batches", async () => {
-      // Build 6 files so we get two batches of 4 (batch size is 4).
-      // Batch 1: good, good, bad, good   -> rejects via Promise.all
-      // Batch 2: good, good              -> must NOT be touched
       const files = [
         "/path/to/b1_good_a.cbz",
         "/path/to/b1_good_b.cbz",
@@ -200,10 +220,10 @@ describe("ComicProcessor", () => {
         })),
       );
 
-      const archiveMock = ArchiveProcessor as jest.MockedClass<
+      const archiveMock = ArchiveProcessor as unknown as MockedClass<
         typeof ArchiveProcessor
       >;
-      const processCBZ = jest.fn(async (input: string, _output: string) => {
+      const processCBZ = vi.fn(async (input: string, _output: string) => {
         if (input.endsWith("b1_bad.cbz")) {
           throw new ImageSkippedError("page_001.jpg", "unsupported format");
         }
@@ -226,7 +246,6 @@ describe("ComicProcessor", () => {
         processor.processDirectory("/path/to"),
       ).rejects.toBeInstanceOf(ImageSkippedError);
 
-      // Files in batch 2 must never have been dispatched.
       const calledInputs = processCBZ.mock.calls.map((c) => c[0]);
       expect(calledInputs).not.toContain("/path/to/b2_good_a.cbz");
       expect(calledInputs).not.toContain("/path/to/b2_good_b.cbz");
@@ -237,17 +256,16 @@ describe("ComicProcessor", () => {
       const badPath = "/path/to/bad.cbz";
       const laterPath = "/path/to/later.cbz";
 
-      // Make the directory walk return three files.
       fs.readdir.mockResolvedValue([
         { name: "good.cbz", isDirectory: () => false, isFile: () => true },
         { name: "bad.cbz", isDirectory: () => false, isFile: () => true },
         { name: "later.cbz", isDirectory: () => false, isFile: () => true },
       ]);
 
-      const archiveMock = ArchiveProcessor as jest.MockedClass<
+      const archiveMock = ArchiveProcessor as unknown as MockedClass<
         typeof ArchiveProcessor
       >;
-      const processCBZ = jest.fn(async (input: string, _output: string) => {
+      const processCBZ = vi.fn(async (input: string, _output: string) => {
         if (input.endsWith("good.cbz")) {
           return {
             imagesProcessed: 1,
@@ -277,8 +295,6 @@ describe("ComicProcessor", () => {
         processor.processDirectory("/path/to"),
       ).rejects.toBeInstanceOf(ImageSkippedError);
 
-      // The third file must NOT have been processed because we bailed on the
-      // second file's ImageSkippedError.
       const processedInputs = processCBZ.mock.calls.map((c) => c[0]);
       expect(processedInputs).toEqual(
         expect.arrayContaining([goodPath, badPath]),
@@ -288,11 +304,11 @@ describe("ComicProcessor", () => {
   });
 
   describe("printSummary", () => {
-    let consoleLogSpy: jest.SpyInstance;
+    let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
       processor = new ComicProcessor(defaultOptions);
-      consoleLogSpy = jest.spyOn(console, "log").mockImplementation();
+      consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -301,7 +317,6 @@ describe("ComicProcessor", () => {
 
     it("should print summary when no files processed", () => {
       processor.printSummary();
-      // Should log warning about no files processed
       expect(true).toBe(true);
     });
   });

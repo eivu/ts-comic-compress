@@ -1,4 +1,5 @@
-import { ImageSkippedError } from "../src/types";
+import { describe, it, expect } from "vitest";
+import { ImageSkippedError } from "../src/types.js";
 
 describe("ImageSkippedError", () => {
   it("should be an instance of Error", () => {

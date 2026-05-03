@@ -1,37 +1,80 @@
-import { PDFProcessor } from "../src/pdf-processor";
-import { ImageConverter } from "../src/image-converter";
-import { ImageSkippedError, ProgressCallback } from "../src/types";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  type Mock,
+} from "vitest";
+import { PDFProcessor } from "../src/pdf-processor.js";
+import { ImageConverter } from "../src/image-converter.js";
+import { ImageSkippedError, type ProgressCallback } from "../src/types.js";
 import * as pdfjsLib from "pdfjs-dist";
+import * as fsu from "../src/fs-utils.js";
 
-// Mock dependencies
-jest.mock("../src/image-converter");
-jest.mock("fs-extra");
+vi.mock("../src/image-converter.js");
+vi.mock("../src/fs-utils.js", () => ({
+  pathExists: vi.fn(),
+  stat: vi.fn(),
+  readFile: vi.fn(),
+  readdir: vi.fn(),
+  mkdtemp: vi.fn(),
+  ensureDir: vi.fn(),
+  remove: vi.fn(),
+  copy: vi.fn(),
+  move: vi.fn(),
+  createWriteStream: vi.fn(),
+}));
+vi.mock("pdfjs-dist", () => ({
+  GlobalWorkerOptions: { workerSrc: "" },
+  getDocument: vi.fn(),
+}));
 
-const fs = require("fs-extra");
+const fs = fsu as unknown as Record<string, Mock>;
 
 const mockImageConverter = {
-  shouldProcess: jest.fn(),
-  convertToWebP: jest.fn(),
-} as unknown as jest.Mocked<ImageConverter>;
+  shouldProcess: vi.fn(),
+  convertToWebP: vi.fn(),
+} as unknown as ImageConverter & {
+  shouldProcess: Mock;
+  convertToWebP: Mock;
+};
 
-const mockProgressCallback = jest.fn() as jest.Mock<ProgressCallback>;
+const mockProgressCallback = vi.fn() as unknown as ProgressCallback;
 
-// Helper function to create a mock write stream that immediately fires "close"
-function createMockWriteStream(): any {
-  const stream: any = {
-    on: jest.fn((event: string, callback: any) => {
-      if (event === "close") {
-        callback();
-      }
-      return stream;
-    }),
-    once: jest.fn(() => stream),
-    emit: jest.fn(),
-    write: jest.fn(),
-    end: jest.fn(),
-    destroy: jest.fn(),
-    pipe: jest.fn(),
+function createMockWriteStream(): {
+  on: Mock;
+  once: Mock;
+  emit: Mock;
+  write: Mock;
+  end: Mock;
+  destroy: Mock;
+  pipe: Mock;
+} {
+  const stream: {
+    on: Mock;
+    once: Mock;
+    emit: Mock;
+    write: Mock;
+    end: Mock;
+    destroy: Mock;
+    pipe: Mock;
+  } = {
+    on: vi.fn(),
+    once: vi.fn(),
+    emit: vi.fn(),
+    write: vi.fn(),
+    end: vi.fn(),
+    destroy: vi.fn(),
+    pipe: vi.fn(),
   };
+  stream.on.mockImplementation((event: string, callback: () => void) => {
+    if (event === "close") {
+      callback();
+    }
+    return stream;
+  });
+  stream.once.mockImplementation(() => stream);
   return stream;
 }
 
@@ -43,27 +86,25 @@ interface FakeImage {
 
 function buildFakePdf(pages: FakeImage[][]) {
   const fakePages = pages.map((images) => ({
-    getOperatorList: jest.fn().mockResolvedValue({
+    getOperatorList: vi.fn().mockResolvedValue({
       // op code 60 == paintImageXObject; arg[0] is the image ref id
       fnArray: images.map(() => 60),
       argsArray: images.map((img) => [img.ref]),
     }),
     objs: {
-      get: jest.fn(async (ref: number) => {
+      get: vi.fn(async (ref: number) => {
         const match = images.find((img) => img.ref === ref);
-        return match
-          ? { data: match.data, ext: "jpg" }
-          : null;
+        return match ? { data: match.data, ext: "jpg" } : null;
       }),
     },
   }));
 
   const fakePdf = {
     numPages: pages.length,
-    getPage: jest.fn(async (pageNum: number) => fakePages[pageNum - 1]),
+    getPage: vi.fn(async (pageNum: number) => fakePages[pageNum - 1]),
   };
 
-  (pdfjsLib.getDocument as jest.Mock).mockReturnValue({
+  (pdfjsLib.getDocument as unknown as Mock).mockReturnValue({
     promise: Promise.resolve(fakePdf),
   });
 }
@@ -72,7 +113,9 @@ describe("PDFProcessor", () => {
   let pdfProcessor: PDFProcessor;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    mockImageConverter.shouldProcess = vi.fn();
+    mockImageConverter.convertToWebP = vi.fn();
     pdfProcessor = new PDFProcessor(mockImageConverter, mockProgressCallback);
   });
 
@@ -110,11 +153,14 @@ describe("PDFProcessor", () => {
     const outputPath = "/path/to/output.pdf";
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       fs.readFile.mockResolvedValue(Buffer.from("mock pdf data"));
       fs.ensureDir.mockResolvedValue(undefined);
       fs.stat.mockResolvedValue({ size: 1000 });
       fs.createWriteStream.mockReturnValue(createMockWriteStream());
+
+      mockImageConverter.shouldProcess = vi.fn();
+      mockImageConverter.convertToWebP = vi.fn();
     });
 
     it("should not throw when raiseException is false and an image is skipped", async () => {

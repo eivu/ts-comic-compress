@@ -1,14 +1,23 @@
-import * as fs from "fs-extra";
-import * as path from "path";
-import * as os from "os";
-import * as yauzl from "yauzl";
-import * as yazl from "yazl";
+import * as path from "node:path";
+import * as os from "node:os";
+import {
+  createWriteStream,
+  ensureDir,
+  mkdtemp,
+  pathExists,
+  readFile,
+  remove,
+  stat,
+} from "./fs-utils.js";
+import yauzl from "yauzl";
+import yazl from "yazl";
 import {
   createExtractorFromData,
   createExtractorFromFile,
 } from "node-unrar-js";
-import { ImageConverter } from "./image-converter";
-import { ImageInfo, ImageSkippedError, ProgressCallback } from "./types";
+import type { ImageConverter } from "./image-converter.js";
+import { ImageSkippedError } from "./types.js";
+import type { ImageInfo, ProgressCallback } from "./types.js";
 
 export class ArchiveProcessor {
   constructor(
@@ -29,7 +38,6 @@ export class ArchiveProcessor {
     const images: ImageInfo[] = [];
     let originalSize = 0;
 
-    // Extract images from CBZ (ZIP)
     await new Promise<void>((resolve, reject) => {
       yauzl.open(inputPath, { lazyEntries: true }, (err, zipfile) => {
         if (err) {
@@ -45,7 +53,6 @@ export class ArchiveProcessor {
         zipfile.readEntry();
         zipfile.on("entry", (entry) => {
           if (/\/$/.test(entry.fileName)) {
-            // Directory entry, skip
             zipfile.readEntry();
             return;
           }
@@ -83,7 +90,6 @@ export class ArchiveProcessor {
       });
     });
 
-    // Sort images by name to maintain page order before processing
     images.sort((a, b) =>
       a.name.localeCompare(b.name, undefined, {
         numeric: true,
@@ -91,13 +97,11 @@ export class ArchiveProcessor {
       }),
     );
 
-    // Process images
     let imagesProcessed = 0;
     let imagesSkipped = 0;
     const processedImages: Array<{ name: string; data: Buffer }> = [];
     const totalPages = images.length;
 
-    // Report initial progress (0 of total) to show total page count
     if (this.progressCallback && totalPages > 0) {
       this.progressCallback(0, totalPages);
     }
@@ -106,7 +110,6 @@ export class ArchiveProcessor {
       const image = images[i];
       const currentPage = i + 1;
 
-      // Report progress
       if (this.progressCallback) {
         this.progressCallback(currentPage, totalPages);
       }
@@ -134,24 +137,20 @@ export class ArchiveProcessor {
       }
     }
 
-    // Images are already sorted from the original array, just ensure processed images maintain order
-    // (They should already be in order since we process them in order)
-
-    // Create new CBZ file
     const zipfile = new yazl.ZipFile();
     for (const img of processedImages) {
       zipfile.addBuffer(img.data, img.name);
     }
 
     const outputDir = path.dirname(outputPath);
-    await fs.ensureDir(outputDir);
+    await ensureDir(outputDir);
 
     let compressedSize = 0;
     await new Promise<void>((resolve, reject) => {
       zipfile.outputStream
-        .pipe(fs.createWriteStream(outputPath))
+        .pipe(createWriteStream(outputPath))
         .on("close", () => {
-          fs.stat(outputPath)
+          stat(outputPath)
             .then((stats) => {
               compressedSize = stats.size;
               resolve();
@@ -167,7 +166,6 @@ export class ArchiveProcessor {
 
   private async isZipFile(filePath: string): Promise<boolean> {
     try {
-      // Try to open as ZIP - if it succeeds, it's a ZIP file
       return new Promise((resolve) => {
         yauzl.open(filePath, { lazyEntries: true }, (err, zipfile) => {
           if (err || !zipfile) {
@@ -195,9 +193,8 @@ export class ArchiveProcessor {
     const images: ImageInfo[] = [];
     let originalSize = 0;
 
-    // Check file size to determine extraction method
-    const stats = await fs.stat(inputPath);
-    const TWO_GB = 2 * 1024 * 1024 * 1024; // 2GB in bytes
+    const stats = await stat(inputPath);
+    const TWO_GB = 2 * 1024 * 1024 * 1024;
     const useFileExtractor = stats.size > TWO_GB;
 
     let tempDir: string | null = null;
@@ -209,16 +206,13 @@ export class ArchiveProcessor {
 
       let extractor;
       if (useFileExtractor) {
-        // For large files (>2GB), use file-based extraction which writes to disk
-        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "rar-extract-"));
+        tempDir = await mkdtemp(path.join(os.tmpdir(), "rar-extract-"));
         extractor = await createExtractorFromFile({
           filepath: inputPath,
           targetPath: tempDir,
         });
       } else {
-        // For smaller files, use in-memory extraction
-        const rarBuffer = await fs.readFile(inputPath);
-        // Convert Buffer to ArrayBuffer
+        const rarBuffer = await readFile(inputPath);
         const rarData = rarBuffer.buffer.slice(
           rarBuffer.byteOffset,
           rarBuffer.byteOffset + rarBuffer.byteLength,
@@ -233,14 +227,12 @@ export class ArchiveProcessor {
       const fileList = extractor.getFileList();
       const fileHeaders = [...fileList.fileHeaders];
 
-      // Filter for image files only
       const imageFiles = fileHeaders.filter((fileHeader) => {
         const ext = path.extname(fileHeader.name).toLowerCase();
         return [".jpg", ".jpeg", ".png", ".webp"].includes(ext);
       });
 
       if (imageFiles.length === 0) {
-        // No image files found, return empty result
         return {
           imagesProcessed: 0,
           imagesSkipped: 0,
@@ -253,14 +245,11 @@ export class ArchiveProcessor {
         `  Found ${imageFiles.length} image file${imageFiles.length !== 1 ? "s" : ""}...\n`,
       );
 
-      // Extract all image files
       const imageFileNames = imageFiles.map((fileHeader) => fileHeader.name);
       const extracted = extractor.extract({ files: imageFileNames });
       const extractedFiles = [...extracted.files];
 
-      // Process extracted files differently based on extraction method
       if (useFileExtractor && tempDir) {
-        // File-based extraction: files are written to disk, read them from temp directory
         process.stdout.write(`  Extracting files to disk...\n`);
 
         const totalFiles = extractedFiles.length;
@@ -276,8 +265,8 @@ export class ArchiveProcessor {
             );
 
             const extractedFilePath = path.join(tempDir, file.fileHeader.name);
-            if (await fs.pathExists(extractedFilePath)) {
-              const buffer = await fs.readFile(extractedFilePath);
+            if (await pathExists(extractedFilePath)) {
+              const buffer = await readFile(extractedFilePath);
               originalSize += buffer.length;
               images.push({
                 data: buffer,
@@ -288,14 +277,12 @@ export class ArchiveProcessor {
           }
         }
 
-        // Clear the extraction progress line and show completion
         if (extractedCount > 0) {
           process.stdout.write(
             `\r  Extracted ${extractedCount} image${extractedCount !== 1 ? "s" : ""} successfully\n`,
           );
         }
       } else {
-        // In-memory extraction: extraction field contains Uint8Array with file data
         process.stdout.write(`  Loading images into memory...\n`);
 
         for (const file of extractedFiles) {
@@ -311,7 +298,6 @@ export class ArchiveProcessor {
         }
       }
 
-      // Sort images by name to maintain page order before processing
       images.sort((a, b) =>
         a.name.localeCompare(b.name, undefined, {
           numeric: true,
@@ -319,13 +305,11 @@ export class ArchiveProcessor {
         }),
       );
 
-      // Process images (same logic as processCBZ)
       let imagesProcessed = 0;
       let imagesSkipped = 0;
       const processedImages: Array<{ name: string; data: Buffer }> = [];
       const totalPages = images.length;
 
-      // Report initial progress (0 of total) to show total page count
       if (this.progressCallback && totalPages > 0) {
         this.progressCallback(0, totalPages);
       }
@@ -334,7 +318,6 @@ export class ArchiveProcessor {
         const image = images[i];
         const currentPage = i + 1;
 
-        // Report progress
         if (this.progressCallback) {
           this.progressCallback(currentPage, totalPages);
         }
@@ -362,23 +345,22 @@ export class ArchiveProcessor {
         }
       }
 
-      // Create new CBZ file (convert CBR to CBZ)
       const zipfile = new yazl.ZipFile();
       for (const img of processedImages) {
         zipfile.addBuffer(img.data, img.name);
       }
 
       const outputDir = path.dirname(outputPath);
-      await fs.ensureDir(outputDir);
+      await ensureDir(outputDir);
 
       let compressedSize = 0;
       await new Promise<void>((resolve, reject) => {
         zipfile.outputStream
-          .pipe(fs.createWriteStream(outputPath))
+          .pipe(createWriteStream(outputPath))
           .on("close", () => {
-            fs.stat(outputPath)
-              .then((stats) => {
-                compressedSize = stats.size;
+            stat(outputPath)
+              .then((s) => {
+                compressedSize = s.size;
                 resolve();
               })
               .catch(reject);
@@ -389,9 +371,8 @@ export class ArchiveProcessor {
 
       return { imagesProcessed, imagesSkipped, originalSize, compressedSize };
     } finally {
-      // Clean up temporary directory if it was created
       if (tempDir) {
-        await fs.remove(tempDir);
+        await remove(tempDir);
       }
     }
   }
@@ -405,15 +386,13 @@ export class ArchiveProcessor {
     originalSize: number;
     compressedSize: number;
   }> {
-    // CBR files can be either ZIP or RAR archives
-    // Try ZIP first (many CBR files are actually ZIP files), then try RAR
+    // CBR files can be either ZIP or RAR archives; many "CBR" files are
+    // actually ZIPs, so try ZIP first and fall back to the RAR path.
     const isZip = await this.isZipFile(inputPath);
 
     if (isZip) {
-      // It's a ZIP file, process as CBZ
       return await this.processCBZ(inputPath, outputPath);
     } else {
-      // It's a RAR file, process with node-unrar-js
       return await this.processRAR(inputPath, outputPath);
     }
   }

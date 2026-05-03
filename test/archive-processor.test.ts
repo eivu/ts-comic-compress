@@ -1,43 +1,98 @@
-import { ArchiveProcessor } from "../src/archive-processor";
-import { ImageConverter } from "../src/image-converter";
-import { ImageSkippedError, ProgressCallback } from "../src/types";
-import * as path from "path";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  vi,
+  type Mock,
+} from "vitest";
+import { ArchiveProcessor } from "../src/archive-processor.js";
+import { ImageConverter } from "../src/image-converter.js";
+import { ImageSkippedError, type ProgressCallback } from "../src/types.js";
+import * as path from "node:path";
 
-// Mock dependencies
-jest.mock("../src/image-converter");
-jest.mock("fs-extra");
-jest.mock("os");
-jest.mock("node-unrar-js");
+import * as fsu from "../src/fs-utils.js";
+import * as nodeUnrar from "node-unrar-js";
 
-// Import mocked modules
-const fs = require("fs-extra");
-const os = require("os");
+const { tmpdirMock } = vi.hoisted(() => ({
+  tmpdirMock: vi.fn<() => string>(() => "/tmp"),
+}));
+
+vi.mock("../src/image-converter.js");
+vi.mock("../src/fs-utils.js", () => ({
+  pathExists: vi.fn(),
+  stat: vi.fn(),
+  readFile: vi.fn(),
+  readdir: vi.fn(),
+  mkdtemp: vi.fn(),
+  ensureDir: vi.fn(),
+  remove: vi.fn(),
+  copy: vi.fn(),
+  move: vi.fn(),
+  createWriteStream: vi.fn(),
+}));
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
+  return {
+    ...actual,
+    tmpdir: tmpdirMock,
+    default: { ...actual, tmpdir: tmpdirMock },
+  };
+});
+vi.mock("node-unrar-js", () => ({
+  createExtractorFromData: vi.fn(),
+  createExtractorFromFile: vi.fn(),
+}));
+
+const fs = fsu as unknown as Record<string, Mock>;
+const createExtractorFromDataMock =
+  nodeUnrar.createExtractorFromData as unknown as Mock;
+const createExtractorFromFileMock =
+  nodeUnrar.createExtractorFromFile as unknown as Mock;
 
 const mockImageConverter = {
-  shouldProcess: jest.fn(),
-  convertToWebP: jest.fn(),
-} as unknown as jest.Mocked<ImageConverter>;
+  shouldProcess: vi.fn(),
+  convertToWebP: vi.fn(),
+} as unknown as ImageConverter & {
+  shouldProcess: Mock;
+  convertToWebP: Mock;
+};
 
-const mockProgressCallback = jest.fn() as jest.Mock<ProgressCallback>;
+const mockProgressCallback = vi.fn() as unknown as ProgressCallback;
 
-// Helper function to create a mock write stream
-function createMockWriteStream(): any {
-  const stream: any = {
-    on: jest.fn((event: string, callback: any) => {
-      if (event === "close") {
-        callback();
-      }
-      return stream;
-    }),
-    once: jest.fn((event: string, callback: any) => {
-      return stream;
-    }),
-    emit: jest.fn(),
-    write: jest.fn(),
-    end: jest.fn(),
-    destroy: jest.fn(),
-    pipe: jest.fn(),
+function createMockWriteStream(): {
+  on: Mock;
+  once: Mock;
+  emit: Mock;
+  write: Mock;
+  end: Mock;
+  destroy: Mock;
+  pipe: Mock;
+} {
+  const stream: {
+    on: Mock;
+    once: Mock;
+    emit: Mock;
+    write: Mock;
+    end: Mock;
+    destroy: Mock;
+    pipe: Mock;
+  } = {
+    on: vi.fn(),
+    once: vi.fn(),
+    emit: vi.fn(),
+    write: vi.fn(),
+    end: vi.fn(),
+    destroy: vi.fn(),
+    pipe: vi.fn(),
   };
+  stream.on.mockImplementation((event: string, callback: () => void) => {
+    if (event === "close") {
+      callback();
+    }
+    return stream;
+  });
+  stream.once.mockImplementation(() => stream);
   return stream;
 }
 
@@ -45,7 +100,10 @@ describe("ArchiveProcessor", () => {
   let archiveProcessor: ArchiveProcessor;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    tmpdirMock.mockReturnValue("/tmp");
+    mockImageConverter.shouldProcess = vi.fn();
+    mockImageConverter.convertToWebP = vi.fn();
     archiveProcessor = new ArchiveProcessor(
       mockImageConverter,
       mockProgressCallback,
@@ -86,47 +144,32 @@ describe("ArchiveProcessor", () => {
     const mockTempDir = "/tmp/rar-extract-test123";
 
     beforeEach(() => {
-      // Reset all mocks
-      jest.clearAllMocks();
+      vi.clearAllMocks();
+      tmpdirMock.mockReturnValue("/tmp");
 
-      // Mock os.tmpdir
-      os.tmpdir.mockReturnValue("/tmp");
-
-      // Mock fs.mkdtemp
       fs.mkdtemp.mockResolvedValue(mockTempDir);
-
-      // Mock fs.ensureDir
       fs.ensureDir.mockResolvedValue(undefined);
-
-      // Mock fs.stat for output file
       fs.stat.mockResolvedValue({ size: 1000 });
-
-      // Mock fs.remove
       fs.remove.mockResolvedValue(undefined);
 
-      // Mock image converter
-      mockImageConverter.shouldProcess.mockResolvedValue(false);
+      mockImageConverter.shouldProcess = vi.fn().mockResolvedValue(false);
+      mockImageConverter.convertToWebP = vi.fn();
     });
 
     it("should use in-memory extraction for files under 2GB", async () => {
-      const { createExtractorFromData } = require("node-unrar-js");
+      fs.stat.mockResolvedValueOnce({ size: 1024 * 1024 * 1024 });
 
-      // Mock file size under 2GB
-      fs.stat.mockResolvedValueOnce({ size: 1024 * 1024 * 1024 }); // 1GB
-
-      // Mock RAR file buffer
       const mockBuffer = Buffer.from("mock rar data");
       fs.readFile.mockResolvedValue(mockBuffer);
 
-      // Mock extractor
       const mockExtractor = {
-        getFileList: jest.fn().mockReturnValue({
+        getFileList: vi.fn().mockReturnValue({
           fileHeaders: [
             { name: "image1.jpg", flags: { directory: false } },
             { name: "image2.jpg", flags: { directory: false } },
           ],
         }),
-        extract: jest.fn().mockReturnValue({
+        extract: vi.fn().mockReturnValue({
           files: [
             {
               fileHeader: { name: "image1.jpg", flags: { directory: false } },
@@ -140,37 +183,31 @@ describe("ArchiveProcessor", () => {
         }),
       };
 
-      createExtractorFromData.mockResolvedValue(mockExtractor);
+      createExtractorFromDataMock.mockResolvedValue(mockExtractor);
 
-      // Mock fs.createWriteStream
       fs.createWriteStream.mockReturnValue(createMockWriteStream());
 
       await archiveProcessor.processRAR(mockInputPath, mockOutputPath);
 
-      // Verify in-memory extraction was used
-      expect(createExtractorFromData).toHaveBeenCalled();
+      expect(createExtractorFromDataMock).toHaveBeenCalled();
       expect(fs.mkdtemp).not.toHaveBeenCalled();
       expect(fs.remove).not.toHaveBeenCalled();
     });
 
     it("should use file-based extraction for files over 2GB", async () => {
-      const { createExtractorFromFile } = require("node-unrar-js");
-
-      // Mock file size over 2GB
       const TWO_GB = 2 * 1024 * 1024 * 1024;
       fs.stat
-        .mockResolvedValueOnce({ size: TWO_GB + 1 }) // Input file
-        .mockResolvedValue({ size: 1000 }); // Output file
+        .mockResolvedValueOnce({ size: TWO_GB + 1 })
+        .mockResolvedValue({ size: 1000 });
 
-      // Mock extractor
       const mockExtractor = {
-        getFileList: jest.fn().mockReturnValue({
+        getFileList: vi.fn().mockReturnValue({
           fileHeaders: [
             { name: "image1.jpg", flags: { directory: false } },
             { name: "image2.jpg", flags: { directory: false } },
           ],
         }),
-        extract: jest.fn().mockReturnValue({
+        extract: vi.fn().mockReturnValue({
           files: [
             {
               fileHeader: { name: "image1.jpg", flags: { directory: false } },
@@ -184,31 +221,23 @@ describe("ArchiveProcessor", () => {
         }),
       };
 
-      createExtractorFromFile.mockResolvedValue(mockExtractor);
+      createExtractorFromFileMock.mockResolvedValue(mockExtractor);
 
-      // Mock fs.pathExists
       fs.pathExists.mockResolvedValue(true);
-
-      // Mock fs.readFile for extracted files
       fs.readFile.mockResolvedValue(Buffer.from("mock image data"));
-
-      // Mock fs.createWriteStream
       fs.createWriteStream.mockReturnValue(createMockWriteStream());
 
       await archiveProcessor.processRAR(mockInputPath, mockOutputPath);
 
-      // Verify file-based extraction was used
-      expect(createExtractorFromFile).toHaveBeenCalledWith({
+      expect(createExtractorFromFileMock).toHaveBeenCalledWith({
         filepath: mockInputPath,
         targetPath: mockTempDir,
       });
 
-      // Verify temp directory was created
       expect(fs.mkdtemp).toHaveBeenCalledWith(
         path.join("/tmp", "rar-extract-"),
       );
 
-      // Verify files were read from disk
       expect(fs.pathExists).toHaveBeenCalledTimes(2);
       expect(fs.readFile).toHaveBeenCalledWith(
         path.join(mockTempDir, "image1.jpg"),
@@ -217,57 +246,47 @@ describe("ArchiveProcessor", () => {
         path.join(mockTempDir, "image2.jpg"),
       );
 
-      // Verify temp directory was cleaned up
       expect(fs.remove).toHaveBeenCalledWith(mockTempDir);
     });
 
     it("should clean up temp directory even if extraction fails", async () => {
-      const { createExtractorFromFile } = require("node-unrar-js");
-
-      // Mock file size over 2GB
       const TWO_GB = 2 * 1024 * 1024 * 1024;
       fs.stat.mockResolvedValue({ size: TWO_GB + 1 });
 
-      // Mock extractor that throws an error
       const mockExtractor = {
-        getFileList: jest.fn().mockImplementation(() => {
+        getFileList: vi.fn().mockImplementation(() => {
           throw new Error("Extraction failed");
         }),
       };
 
-      createExtractorFromFile.mockResolvedValue(mockExtractor);
+      createExtractorFromFileMock.mockResolvedValue(mockExtractor);
 
       await expect(
         archiveProcessor.processRAR(mockInputPath, mockOutputPath),
       ).rejects.toThrow("Extraction failed");
 
-      // Verify temp directory was still cleaned up
       expect(fs.remove).toHaveBeenCalledWith(mockTempDir);
     });
 
     it("should report extraction progress to stdout when no callback provided", async () => {
-      const { createExtractorFromFile } = require("node-unrar-js");
-
-      // Create processor WITHOUT progress callback
       const processorWithoutCallback = new ArchiveProcessor(
-        mockImageConverter as any,
+        mockImageConverter,
       );
 
-      // Mock file size over 2GB
       const TWO_GB = 2 * 1024 * 1024 * 1024;
       fs.stat
         .mockResolvedValueOnce({ size: TWO_GB + 1 })
         .mockResolvedValue({ size: 1000 });
 
       const mockExtractor = {
-        getFileList: jest.fn().mockReturnValue({
+        getFileList: vi.fn().mockReturnValue({
           fileHeaders: [
             { name: "image1.jpg", flags: { directory: false } },
             { name: "image2.jpg", flags: { directory: false } },
             { name: "image3.jpg", flags: { directory: false } },
           ],
         }),
-        extract: jest.fn().mockReturnValue({
+        extract: vi.fn().mockReturnValue({
           files: [
             {
               fileHeader: { name: "image1.jpg", flags: { directory: false } },
@@ -285,19 +304,17 @@ describe("ArchiveProcessor", () => {
         }),
       };
 
-      createExtractorFromFile.mockResolvedValue(mockExtractor);
+      createExtractorFromFileMock.mockResolvedValue(mockExtractor);
       fs.pathExists.mockResolvedValue(true);
       fs.readFile.mockResolvedValue(Buffer.from("mock image data"));
       fs.createWriteStream.mockReturnValue(createMockWriteStream());
 
-      // Spy on process.stdout.write
-      const stdoutSpy = jest
+      const stdoutSpy = vi
         .spyOn(process.stdout, "write")
-        .mockImplementation();
+        .mockImplementation(() => true);
 
       await processorWithoutCallback.processRAR(mockInputPath, mockOutputPath);
 
-      // Verify extraction progress was displayed
       expect(stdoutSpy).toHaveBeenCalledWith(
         expect.stringContaining("Extracting image 1/3"),
       );
@@ -312,23 +329,19 @@ describe("ArchiveProcessor", () => {
     });
 
     it("should show extraction status even when callback is provided", async () => {
-      const { createExtractorFromFile } = require("node-unrar-js");
-
-      // Use the default archiveProcessor which HAS a progress callback
-      // Mock file size over 2GB
       const TWO_GB = 2 * 1024 * 1024 * 1024;
       fs.stat
         .mockResolvedValueOnce({ size: TWO_GB + 1 })
         .mockResolvedValue({ size: 1000 });
 
       const mockExtractor = {
-        getFileList: jest.fn().mockReturnValue({
+        getFileList: vi.fn().mockReturnValue({
           fileHeaders: [
             { name: "image1.jpg", flags: { directory: false } },
             { name: "image2.jpg", flags: { directory: false } },
           ],
         }),
-        extract: jest.fn().mockReturnValue({
+        extract: vi.fn().mockReturnValue({
           files: [
             {
               fileHeader: { name: "image1.jpg", flags: { directory: false } },
@@ -342,20 +355,17 @@ describe("ArchiveProcessor", () => {
         }),
       };
 
-      createExtractorFromFile.mockResolvedValue(mockExtractor);
+      createExtractorFromFileMock.mockResolvedValue(mockExtractor);
       fs.pathExists.mockResolvedValue(true);
       fs.readFile.mockResolvedValue(Buffer.from("mock image data"));
       fs.createWriteStream.mockReturnValue(createMockWriteStream());
 
-      // Spy on process.stdout.write
-      const stdoutSpy = jest
+      const stdoutSpy = vi
         .spyOn(process.stdout, "write")
-        .mockImplementation();
+        .mockImplementation(() => true);
 
       await archiveProcessor.processRAR(mockInputPath, mockOutputPath);
 
-      // Verify extraction status is shown (extraction status is always shown,
-      // it's separate from and doesn't conflict with the image processing callback)
       expect(stdoutSpy).toHaveBeenCalledWith(
         expect.stringContaining("Opening RAR archive"),
       );
@@ -370,19 +380,16 @@ describe("ArchiveProcessor", () => {
     });
 
     it("should return empty result when no image files found", async () => {
-      const { createExtractorFromData } = require("node-unrar-js");
-
-      // Mock small file
       fs.stat.mockResolvedValue({ size: 1024 });
       fs.readFile.mockResolvedValue(Buffer.from("mock data"));
 
       const mockExtractor = {
-        getFileList: jest.fn().mockReturnValue({
+        getFileList: vi.fn().mockReturnValue({
           fileHeaders: [{ name: "readme.txt", flags: { directory: false } }],
         }),
       };
 
-      createExtractorFromData.mockResolvedValue(mockExtractor);
+      createExtractorFromDataMock.mockResolvedValue(mockExtractor);
 
       const result = await archiveProcessor.processRAR(
         mockInputPath,
@@ -403,18 +410,20 @@ describe("ArchiveProcessor", () => {
     const mockOutputPath = "/path/to/output.cbz";
 
     beforeEach(() => {
-      jest.clearAllMocks();
-      os.tmpdir.mockReturnValue("/tmp");
+      vi.clearAllMocks();
+      tmpdirMock.mockReturnValue("/tmp");
       fs.mkdtemp.mockResolvedValue("/tmp/rar-extract-test123");
       fs.ensureDir.mockResolvedValue(undefined);
-      fs.stat.mockResolvedValue({ size: 1024 * 1024 * 1024 }); // 1GB (in-memory path)
+      fs.stat.mockResolvedValue({ size: 1024 * 1024 * 1024 });
       fs.remove.mockResolvedValue(undefined);
       fs.readFile.mockResolvedValue(Buffer.from("mock rar data"));
       fs.createWriteStream.mockReturnValue(createMockWriteStream());
+
+      mockImageConverter.shouldProcess = vi.fn();
+      mockImageConverter.convertToWebP = vi.fn();
     });
 
     function buildExtractorWithImages(names: string[]) {
-      const { createExtractorFromData } = require("node-unrar-js");
       const headers = names.map((name) => ({
         name,
         flags: { directory: false },
@@ -424,10 +433,10 @@ describe("ArchiveProcessor", () => {
         extraction: new Uint8Array([idx + 1, idx + 2, idx + 3]),
       }));
       const mockExtractor = {
-        getFileList: jest.fn().mockReturnValue({ fileHeaders: headers }),
-        extract: jest.fn().mockReturnValue({ files }),
+        getFileList: vi.fn().mockReturnValue({ fileHeaders: headers }),
+        extract: vi.fn().mockReturnValue({ files }),
       };
-      createExtractorFromData.mockResolvedValue(mockExtractor);
+      createExtractorFromDataMock.mockResolvedValue(mockExtractor);
       return mockExtractor;
     }
 
@@ -499,7 +508,6 @@ describe("ArchiveProcessor", () => {
 
     it("should throw on the first skipped image and stop processing the rest", async () => {
       buildExtractorWithImages(["image1.jpg", "image2.jpg", "image3.jpg"]);
-      // First image is processable, second is skipped, third would also be skipped
       mockImageConverter.shouldProcess
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false)
@@ -519,7 +527,6 @@ describe("ArchiveProcessor", () => {
         imageName: "image2.jpg",
       });
 
-      // Only the first two images should have been queried; we bail after the second.
       expect(mockImageConverter.shouldProcess).toHaveBeenCalledTimes(2);
     });
 
